@@ -34,14 +34,14 @@
 - [ ] Test: invalid session → 401; valid session → results <10ms
 
 ## Phase 4: Frappe Frontend UI & Analytics
-- [ ] Wire JS/CSS into Frappe via `hooks.py`
-- [ ] Build `LightningSearch` JS class with full DOM construction
-- [ ] Implement Cmd+K / Ctrl+K global keyboard listener
-- [ ] Implement 80ms debounced search with `fetch` + `credentials: include`
-- [ ] Implement grouped results display (by DocType with icons)
-- [ ] Implement keyboard navigation (↑↓ Enter Esc)
-- [ ] Implement inline latency display (`⚡ Xms`)
-- [ ] Implement graceful degradation (fallback to Frappe native search)
+- [x] Wire JS/CSS into Frappe via `hooks.py`
+- [x] Build `LightningSearch` JS class with full DOM construction
+- [x] Implement Cmd+K / Ctrl+K global keyboard listener
+- [x] Implement 80ms debounced search with `fetch` + `credentials: include`
+- [x] Implement grouped results display (by DocType with icons)
+- [x] Implement keyboard navigation (↑↓ Enter Esc)
+- [x] Implement inline latency display (`⚡ Xms`)
+- [x] Implement graceful degradation (fallback to Frappe native search)
 - [ ] Create `Lightning Search Log` Frappe DocType
 - [ ] Implement Python analytics API (`get_analytics_data`)
 - [ ] Build Analytics Frappe Page: top searches, zero-results, latency trend, CTR

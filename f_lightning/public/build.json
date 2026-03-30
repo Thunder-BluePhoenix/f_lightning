@@ -1,0 +1,8 @@
+{
+    "css/lightning_search.css": [
+        "public/css/lightning_search.css"
+    ],
+    "js/lightning_search.js": [
+        "public/js/lightning_search.js"
+    ]
+}

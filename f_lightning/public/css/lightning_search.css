@@ -1,0 +1,214 @@
+/* 
+ * Frappe Lightning Search UI 
+ * Modern, glassmorphic, ultra-fast UI component for Frappe desk
+ */
+
+ :root {
+    --ls-bg: rgba(18, 18, 18, 0.85); /* Dark translucent background */
+    --ls-surface: rgba(30, 30, 30, 0.95);
+    --ls-border: rgba(255, 255, 255, 0.1);
+    --ls-accent: #3d8bff;
+    --ls-text: #ffffff;
+    --ls-text-muted: #a0a0a0;
+    --ls-hover: rgba(255, 255, 255, 0.05);
+    --ls-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.5);
+    --ls-radius: 12px;
+}
+
+/* Modal Overlay */
+.ls-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 10vh;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ls-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* Modal Content Box */
+.ls-modal {
+    width: 100%;
+    max-width: 600px;
+    background: var(--ls-surface);
+    border: 1px solid var(--ls-border);
+    border-radius: var(--ls-radius);
+    box-shadow: var(--ls-shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.95) translateY(-10px);
+    opacity: 0;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(20px);
+}
+
+.ls-overlay.visible .ls-modal {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+/* Search Header */
+.ls-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--ls-border);
+}
+
+.ls-icon-search {
+    color: var(--ls-text-muted);
+    font-size: 20px;
+    margin-right: 12px;
+    display: flex;
+}
+
+.ls-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--ls-text);
+    font-size: 1.1rem;
+    outline: none;
+    font-family: inherit;
+    padding: 4px 0;
+}
+
+.ls-input::placeholder {
+    color: var(--ls-text-muted);
+}
+
+.ls-meta {
+    font-size: 0.75rem;
+    color: var(--ls-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: monospace;
+}
+
+.ls-kbd {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: #ccc;
+}
+
+/* Results Area */
+.ls-body {
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.ls-body::-webkit-scrollbar {
+    width: 6px;
+}
+.ls-body::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+}
+
+/* Grouping by DocType */
+.ls-group-header {
+    padding: 12px 12px 4px 12px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ls-text-muted);
+    font-weight: 600;
+}
+
+/* Individual Result Item */
+.ls-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-decoration: none;
+    color: var(--ls-text);
+}
+
+.ls-item:hover, .ls-item.selected {
+    background: var(--ls-hover);
+}
+
+.ls-item.selected {
+    border-left: 3px solid var(--ls-accent);
+}
+
+.ls-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: rgba(61, 139, 255, 0.1);
+    color: var(--ls-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.ls-item-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ls-item-title {
+    font-weight: 500;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ls-item-subtitle {
+    font-size: 0.8rem;
+    color: var(--ls-text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ls-empty {
+    padding: 40px;
+    text-align: center;
+    color: var(--ls-text-muted);
+}
+
+/* NLP Pill Highlights */
+.ls-pill {
+    display: inline-block;
+    background: rgba(61, 139, 255, 0.15);
+    color: #82b4ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* Override standard Desk input styling conflicts */
+body.nav-open .ls-overlay {
+    display: none;
+}
