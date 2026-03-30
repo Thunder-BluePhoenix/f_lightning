@@ -20,16 +20,18 @@ type Batcher struct {
 	buffers map[string][]interface{} // indexName → pending docs
 	flushFn func(indexName string, docs []interface{}) error
 	log     *zap.Logger
+	dlq     *DLQManager
 	ticker  *time.Ticker
 	quit    chan struct{}
 }
 
 // NewBatcher creates and starts a Batcher.
-func NewBatcher(flushFn func(string, []interface{}) error, log *zap.Logger) *Batcher {
+func NewBatcher(flushFn func(string, []interface{}) error, log *zap.Logger, dlq *DLQManager) *Batcher {
 	b := &Batcher{
 		buffers: make(map[string][]interface{}),
 		flushFn: flushFn,
 		log:     log,
+		dlq:     dlq,
 		ticker:  time.NewTicker(maxBatchWait),
 		quit:    make(chan struct{}),
 	}
@@ -108,11 +110,14 @@ func (b *Batcher) sendWithRetry(indexName string, docs []interface{}, attempt in
 			time.Sleep(delay)
 			b.sendWithRetry(indexName, docs, attempt+1)
 		} else {
-			b.log.Error("meilisearch flush permanently failed — docs dropped",
+			b.log.Error("meilisearch flush permanently failed — docs sent to DLQ",
 				zap.String("index", indexName),
 				zap.Int("docs", len(docs)),
 				zap.Error(err),
 			)
+			if b.dlq != nil {
+				b.dlq.Push(indexName, docs, err)
+			}
 		}
 	} else {
 		b.log.Info("flushed batch to meilisearch",

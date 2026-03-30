@@ -74,7 +74,8 @@ func NewEngine(site *config.SiteConfig, schemas []config.IndexSchema, meili meil
 		hooks:   newHookRegistry(),
 		log:     log,
 	}
-	e.batcher = NewBatcher(e.flushBatch, log)
+	dlq := NewDLQManager(log)
+	e.batcher = NewBatcher(e.flushBatch, log, dlq)
 	return e
 }
 

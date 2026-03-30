@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/go-mysql-org/go-mysql v1.14.0
+	github.com/go-sql-driver/mysql v1.7.1
 	github.com/meilisearch/meilisearch-go v0.36.1
 	go.uber.org/zap v1.27.1
 	gopkg.in/yaml.v3 v3.0.1

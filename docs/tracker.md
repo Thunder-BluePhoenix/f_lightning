@@ -4,22 +4,22 @@
 - [ ] Ensure MariaDB `binlog_format=ROW` and `binlog_row_image=FULL`
 - [ ] Create dedicated `lightning` replication user with correct grants
 - [ ] Stand up Meilisearch (Docker) and verify `/health`
-- [ ] Create Go project structure with all directories
-- [ ] Write `config.yaml` with site, DB, Meilisearch, Redis config
-- [ ] Implement `canal/listener.go` — `OnRow` handler with table filtering
-- [ ] Implement `main.go` entrypoint — start canal + search engine goroutines
+- [x] Create Go project structure with all directories
+- [x] Write `config.yaml` with site, DB, Meilisearch, Redis config
+- [x] Implement `canal/listener.go` — `OnRow` handler with table filtering
+- [x] Implement `main.go` entrypoint — start canal + search engine goroutines
 - [ ] Verify: saving a Frappe record produces a log line within <1s
 
 ## Phase 2: Indexing & Data Pipeline
-- [ ] Define `config/schema.yaml` for all tracked DocTypes (Sales Invoice, Customer, Item, PO, Supplier)
-- [ ] Implement `search/mapper.go` — MariaDB row → JSON document
-- [ ] Implement index initialization — apply searchable/filterable/sortable settings on startup
-- [ ] Implement INSERT, UPDATE, DELETE event handlers in `search/processor.go`
-- [ ] Implement `search/batcher.go` — 100-doc / 500ms buffer with exponential backoff retry
+- [x] Define `config/schema.yaml` for all tracked DocTypes (Sales Invoice, Customer, Item, PO, Supplier)
+- [x] Implement `search/mapper.go` — MariaDB row → JSON document
+- [x] Implement index initialization — apply searchable/filterable/sortable settings on startup
+- [x] Implement INSERT, UPDATE, DELETE event handlers in `search/processor.go`
+- [x] Implement `search/batcher.go` — 100-doc / 500ms buffer with exponential backoff retry
 - [ ] Implement dead letter queue for permanently failed events
-- [ ] Implement binlog position save/load (`canal/position.go`)
+- [x] Implement binlog position save/load (`canal/position.go`)
 - [ ] Implement `cmd/backfill.go` — paginated full-sync with progress display
-- [ ] Implement `IndexHooks` — `BeforeIndex` and `TransformDoc` per DocType
+- [x] Implement `IndexHooks` — `BeforeIndex` and `TransformDoc` per DocType
 - [ ] Test: 100k row backfill completes; binlog resumes after restart
 
 ## Phase 3: Search API Proxy & Auth
