@@ -50,16 +50,16 @@
 - [x] Create `nlp/models.go` — `Query{}` and `Filter{}` DSL structs
 - [x] Create `nlp/tokenizer.go` — lowercase, strip punctuation, split
 - [x] Create `nlp/intent.go` — DocType synonym dictionary + `DetectDocType`
-- [ ] Create `nlp/rules.go` — `StatusRule`, `AmountRule`, `DateRule` (full coverage)
-- [ ] Amount parser: handle `10k`, `5l`, `5 lakhs`, `2 crore`, `1m`, raw integers
-- [ ] Date parser: `last month/week/year`, `this year/month`, `today`, `yesterday`, `last N days`
-- [ ] Status parser: all standard Frappe statuses
+- [x] Create `nlp/rules.go` — `StatusRule`, `AmountRule`, `DateRule` (full coverage)
+- [x] Amount parser: handle `10k`, `5l`, `5 lakhs`, `2 crore`, `1m`, raw integers
+- [x] Date parser: `last month/week/year`, `this year/month`, `today`, `yesterday`, `last N days`
+- [x] Status parser: all standard Frappe statuses
 - [x] Create `nlp/builder.go` — pluggable rules registry + `BuildQuery()`
-- [ ] Create `nlp/advanced.go` — explicit DSL parser (`field:"value" AND ...`)
+- [x] Create `nlp/advanced.go` — explicit DSL parser (`field:"value" AND ...`)
 - [x] Create `nlp/meili.go` — `ToMeili()` translator
 - [x] Create `nlp/builder_test.go` — table-driven tests; core test passing
-- [ ] Wire NLP engine into `/search` handler (Phase 3 connector)
-- [ ] Test: all NLP patterns produce correct Meilisearch filter output
+- [x] Wire NLP engine into `/search` handler (Phase 3 connector)
+- [x] Test: all NLP patterns produce correct Meilisearch filter output
 
 ## Phase 6: Smart Ranking, Hooks & Multi-Tenancy
 - [ ] Define `config/ranking.yaml` — field weights per DocType

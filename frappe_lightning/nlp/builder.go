@@ -11,11 +11,14 @@ var Rules = []Rule{
 // BuildQuery parses a natural language string and applies all registered rules
 // to transform messy user input into a deterministic structured Query.
 func BuildQuery(input string) Query {
-	tokens := Tokenize(input)
+	cleanInput, extFilters := ExtractAdvancedDSL(input)
+	tokens := Tokenize(cleanInput)
 
 	q := Query{
 		DocType: DetectDocType(tokens),
 		Limit:   20, // Default limit
+		Filters: extFilters,
+		Text:    cleanInput,
 	}
 
 	// Apply all rules sequentially out-of-the-box
@@ -24,10 +27,6 @@ func BuildQuery(input string) Query {
 			q.Filters = append(q.Filters, *f)
 		}
 	}
-
-	// Any tokens not matched by rules could theoretically be aggregated back into q.Text
-	// For now, we populate q.Text fully, and Meilisearch will fuzzy match the rest.
-	q.Text = input
 
 	return q
 }
