@@ -25,12 +25,20 @@
                 <div class="ls-modal">
                     <div class="ls-header">
                         <span class="ls-icon-search">⚡</span>
-                        <input type="text" id="ls-input" class="ls-input" placeholder="Search invoices, customers, items... (e.g., 'unpaid invoices > 5k')" autocomplete="off" spellcheck="false" />
+                        <input type="text" id="ls-input" class="ls-input" placeholder="Search invoices, customers, items..." autocomplete="off" spellcheck="false" />
                         <div class="ls-meta" id="ls-meta">
-                            <span class="ls-kbd">esc</span> to close
+                            <span class="ls-action-btn" id="ls-btn-save" title="Save Search">⭐</span>
+                            <span class="ls-action-btn" id="ls-btn-pin" title="Pin Search">📌</span>
+                            <span class="ls-kbd" style="margin-left:10px">esc</span>
                         </div>
                     </div>
-                    <div id="ls-body" class="ls-body" style="display: none;"></div>
+                    <div id="ls-body" class="ls-body" style="display: none;">
+                        <div id="ls-list" class="ls-list"></div>
+                        <div id="ls-preview" class="ls-preview">
+                            <div class="ls-empty">Select a result to preview</div>
+                        </div>
+                        <div id="ls-detail-overlay" class="ls-detail-overlay"></div>
+                    </div>
                 </div>
             </div>
         `;
@@ -39,6 +47,9 @@
         this.overlay = document.getElementById('ls-overlay');
         this.input = document.getElementById('ls-input');
         this.body = document.getElementById('ls-body');
+        this.list = document.getElementById('ls-list');
+        this.preview = document.getElementById('ls-preview');
+        this.detailOverlay = document.getElementById('ls-detail-overlay');
         this.meta = document.getElementById('ls-meta');
     }
 
@@ -56,11 +67,20 @@
             if (e.target === this.overlay) this.close();
         });
 
+        // Close detail overlay on click
+        this.detailOverlay.addEventListener('click', () => {
+            this.detailOverlay.classList.remove('visible');
+        });
+
+        // Save / Pin Buttons
+        document.getElementById('ls-btn-save').addEventListener('click', () => this.saveCurrent(false));
+        document.getElementById('ls-btn-pin').addEventListener('click', () => this.saveCurrent(true));
+
         // Search Input Handling
         this.input.addEventListener('input', (e) => {
             const query = e.target.value.trim();
             if (query.length === 0) {
-                this.clear();
+                this.loadSaved(); // Show history when empty
                 return;
             }
 
@@ -86,7 +106,11 @@
                 this.openSelected();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
-                this.close();
+                if (this.detailOverlay.classList.contains('visible')) {
+                    this.detailOverlay.classList.remove('visible');
+                } else {
+                    this.close();
+                }
             }
         });
     }
@@ -98,6 +122,7 @@
     open() {
         this.isOpen = true;
         this.overlay.classList.add('visible');
+        this.loadSaved(); // Show recent/pinned on open
         setTimeout(() => this.input.focus(), 50);
     }
 
@@ -110,62 +135,59 @@
     }
 
     clear() {
-        this.body.innerHTML = '';
+        this.list.innerHTML = '';
+        this.preview.innerHTML = '<div class="ls-empty">Select a result to preview</div>';
+        this.detailOverlay.innerHTML = '';
+        this.detailOverlay.classList.remove('visible');
         this.body.style.display = 'none';
-        this.meta.innerHTML = `<span class="ls-kbd">esc</span> to close`;
         this.results = [];
         this.selectedIndex = -1;
     }
 
     async search(query) {
         try {
-            // 1. Check local cache first
             const cached = await this.cache.get(query);
             if (cached) {
-                this.render(cached, true); // true for 'cached' indicator
+                this.renderSearchResults(cached, true);
                 return;
             }
 
-            // 2. Fetch from Go Proxy
             const res = await fetch(`http://${window.location.hostname}:${this.apiPort}/api/v1/search?q=${encodeURIComponent(query)}`, {
                 credentials: 'include'
             });
 
             if (!res.ok) throw new Error('Search failed');
-
             const data = await res.json();
-            
-            // 3. Store in cache
             await this.cache.set(query, data);
             
-            this.render(data);
+            this.renderSearchResults(data);
         } catch (err) {
             console.error('Lightning Search Error:', err);
-            // Fallback to Frappe Native search UI gracefully
-            this.body.innerHTML = `<div class="ls-empty">⚠️ Lightning service unavailable. Fallback to Frappe search.</div>`;
+            this.list.innerHTML = `<div class="ls-empty">⚠️ Service unavailable.</div>`;
             this.body.style.display = 'block';
         }
     }
 
-    render(data, isCached = false) {
-        this.body.style.display = 'block';
+    renderSearchResults(data, isCached = false) {
+        this.body.style.display = 'flex';
         
         if (!data.hits || data.hits.length === 0) {
-            this.body.innerHTML = `<div class="ls-empty">No results found natively in Meilisearch.</div>`;
+            this.list.innerHTML = `<div class="ls-empty">No results found.</div>`;
             this.results = [];
             return;
         }
 
-        // Display parsed NLP syntax in the top right meta bar
         const p = data.parsed;
         let metaHtml = `<span style="color:var(--ls-text-muted)">⚡ ${isCached ? 'cached' : data.took_ms + 'ms'}</span>`;
-        if (p) {
-            if (p.doctype) metaHtml += `<span class="ls-pill">${p.doctype}</span>`;
-            if (p.filters && p.filters.length) metaHtml += `<span class="ls-pill">Filters: ${p.filters.length}</span>`;
-        }
-        this.meta.innerHTML = metaHtml;
+        if (p && p.doctype) metaHtml += `<span class="ls-pill">${p.doctype}</span>`;
+        // Keep the save/pin buttons but prefix with stats
+        const originalMeta = `<span class="ls-action-btn" id="ls-btn-save" title="Save Search">⭐</span>
+                             <span class="ls-action-btn" id="ls-btn-pin" title="Pin Search">📌</span>`;
+        this.meta.innerHTML = metaHtml + originalMeta;
+        // Re-bind because we just overwrote the HTML
+        document.getElementById('ls-btn-save').onclick = () => this.saveCurrent(false);
+        document.getElementById('ls-btn-pin').onclick = () => this.saveCurrent(true);
 
-        // Group Results by DocType
         const grouped = {};
         data.hits.forEach((hit) => {
             const dt = hit.doctype || 'Document';
@@ -174,47 +196,145 @@
         });
 
         let html = '';
-        this.results = []; // Flat array for arrow navigation
+        this.results = [];
 
         for (const [dt, items] of Object.entries(grouped)) {
             html += `<div class="ls-group-header">${dt}</div>`;
             items.forEach(item => {
                 this.results.push(item);
                 const idx = this.results.length - 1;
-                
-                // Construct Title based on DocType
-                let title = item.name;
-                let subtitle = item.customer || item.supplier || item.owner || 'No subtitle';
-                
-                if (item.customer_name) title = item.customer_name;
-                if (item.item_name) title = item.item_name;
+                let title = item.item_name || item.customer_name || item.name;
+                let subtitle = item.customer || item.supplier || item.owner || '';
 
                 html += `
                     <div class="ls-item" id="ls-item-${idx}" onclick="frappe.lightning.go(${idx})">
                         <div class="ls-item-icon">${dt.charAt(0).toUpperCase()}</div>
                         <div class="ls-item-content">
-                            <div class="ls-item-title">${title} <span style="font-size:0.7em; color:gray">${item.name}</span></div>
+                            <div class="ls-item-title">${title}</div>
                             <div class="ls-item-subtitle">${subtitle}</div>
                         </div>
+                        <div class="ls-mobile-only ls-action-btn" onclick="event.stopPropagation(); frappe.lightning.showDetail(${idx})">ℹ️</div>
                     </div>
                 `;
             });
         }
 
-        this.body.innerHTML = html;
+        this.list.innerHTML = html;
         this.selectedIndex = 0;
         this.renderSelection();
     }
 
     renderSelection() {
         document.querySelectorAll('.ls-item').forEach(el => el.classList.remove('selected'));
-        if (this.selectedIndex >= 0) {
+        if (this.selectedIndex >= 0 && this.results[this.selectedIndex]) {
             const el = document.getElementById(`ls-item-${this.selectedIndex}`);
             if (el) {
                 el.classList.add('selected');
                 el.scrollIntoView({ block: 'nearest' });
             }
+
+            const item = this.results[this.selectedIndex];
+            this.updatePreview(item, this.preview);
+            this.updatePreview(item, this.detailOverlay);
         }
+    }
+
+    updatePreview(item, container) {
+        let fieldsHtml = '';
+        const skip = ['_vectors', 'doctype', 'name', 'default_click_score'];
+        
+        for (const [key, val] of Object.entries(item)) {
+            if (skip.includes(key) || !val) continue;
+            fieldsHtml += `
+                <div class="ls-preview-field">
+                    <div class="ls-preview-label">${key.replace(/_/g, ' ')}</div>
+                    <div class="ls-preview-value">${val}</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="ls-preview-header">
+                <div class="ls-preview-label">${item.doctype}</div>
+                <div class="ls-preview-title">${item.name}</div>
+            </div>
+            ${fieldsHtml}
+            <div style="margin-top:auto; padding-top:20px">
+                <button class="btn btn-primary btn-sm btn-block" onclick="frappe.lightning.openSelected()">Open Document</button>
+            </div>
+        `;
+    }
+
+    showDetail(idx) {
+        this.selectedIndex = idx;
+        this.renderSelection();
+        this.detailOverlay.classList.add('visible');
+    }
+
+    async saveCurrent(pinned = false) {
+        const query = this.input.value.trim();
+        if (!query) return;
+
+        try {
+            await frappe.call({
+                method: 'frappe.client.insert',
+                args: {
+                    doc: {
+                        doctype: 'Lightning Saved Search',
+                        user: frappe.session.user,
+                        label: query,
+                        query: query,
+                        is_pinned: pinned ? 1 : 0,
+                        timestamp: frappe.datetime.now_datetime()
+                    }
+                }
+            });
+            frappe.show_alert({ message: pinned ? 'Pinned!' : 'Saved!', indicator: 'green' });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async loadSaved() {
+        try {
+            const res = await frappe.call({
+                method: 'frappe.client.get_list',
+                args: {
+                    doctype: 'Lightning Saved Search',
+                    filters: { user: frappe.session.user },
+                    fields: ['query', 'label', 'is_pinned', 'name'],
+                    order_by: 'is_pinned desc, timestamp desc',
+                    limit: 10
+                }
+            });
+            this.renderSaved(res.message || []);
+        } catch (e) {
+            this.clear();
+        }
+    }
+
+    renderSaved(items) {
+        this.body.style.display = 'flex';
+        if (items.length === 0) {
+            this.list.innerHTML = `<div class="ls-empty">Start searching to see history.</div>`;
+            return;
+        }
+
+        let html = '<div class="ls-group-header">Recent & Pinned</div>';
+        this.results = [];
+        
+        items.forEach((item, idx) => {
+            html += `
+                <div class="ls-item" id="ls-item-${idx}" onclick="window.frappe.lightning.input.value='${item.query}'; window.frappe.lightning.search('${item.query}')">
+                    <div class="ls-item-icon">${item.is_pinned ? '📌' : '🕒'}</div>
+                    <div class="ls-item-content">
+                        <div class="ls-item-title">${item.label}</div>
+                    </div>
+                </div>
+            `;
+        });
+        this.list.innerHTML = html;
+        this.preview.innerHTML = '<div class="ls-empty">Select a history item to re-run search</div>';
     }
 
     openSelected() {
@@ -226,15 +346,9 @@
     go(index) {
         const item = this.results[index];
         if (!item) return;
-
-        // Optionally send a click analytics ping
         this.logClick(item);
-
-        // Frappe routing
-        const dt = item.doctype;
-        const name = item.name;
         this.close();
-        frappe.set_route('Form', dt, name);
+        frappe.set_route('Form', item.doctype, item.name);
     }
 
     logClick(item) {
@@ -247,7 +361,7 @@
                 name: item.name,
                 query: this.input.value
             })
-        }).catch(() => {}); // fire and forget
+        }).catch(() => {});
     }
 }
 
