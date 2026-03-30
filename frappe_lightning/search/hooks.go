@@ -1,5 +1,7 @@
 package search
 
+import "sync"
+
 // IndexHooks holds optional callbacks that customize the indexing pipeline per DocType.
 type IndexHooks struct {
 	// BeforeIndex: return false to skip indexing this document entirely.
@@ -11,7 +13,8 @@ type IndexHooks struct {
 
 // HookRegistry stores hooks keyed by Frappe DocType name.
 type HookRegistry struct {
-	m map[string]*IndexHooks
+	mu sync.RWMutex
+	m  map[string]*IndexHooks
 }
 
 func newHookRegistry() *HookRegistry {
@@ -20,8 +23,10 @@ func newHookRegistry() *HookRegistry {
 	return r
 }
 
-// Register sets hooks for a given DocType.  Safe to call before Start().
+// Register sets hooks for a given DocType. Safe to call before Start().
 func (r *HookRegistry) Register(doctype string, hooks *IndexHooks) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.m[doctype] = hooks
 }
 
@@ -52,7 +57,10 @@ func (r *HookRegistry) registerDefaults() {
 
 // runBeforeIndex returns true if the document should be indexed.
 func (r *HookRegistry) runBeforeIndex(doctype string, doc map[string]interface{}) bool {
+	r.mu.RLock()
 	hooks, ok := r.m[doctype]
+	r.mu.RUnlock()
+
 	if !ok || hooks.BeforeIndex == nil {
 		return true
 	}
@@ -61,7 +69,10 @@ func (r *HookRegistry) runBeforeIndex(doctype string, doc map[string]interface{}
 
 // runTransformDoc applies the transform hook if registered, or returns doc unchanged.
 func (r *HookRegistry) runTransformDoc(doctype string, doc map[string]interface{}) map[string]interface{} {
+	r.mu.RLock()
 	hooks, ok := r.m[doctype]
+	r.mu.RUnlock()
+
 	if !ok || hooks.TransformDoc == nil {
 		return doc
 	}

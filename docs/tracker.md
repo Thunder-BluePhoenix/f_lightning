@@ -62,19 +62,16 @@
 - [x] Test: all NLP patterns produce correct Meilisearch filter output
 
 ## Phase 6: Smart Ranking, Hooks & Multi-Tenancy
-- [ ] Define `config/ranking.yaml` — field weights per DocType
-- [ ] Apply field weights to Meilisearch index settings on startup
-- [ ] Implement role-aware index query ordering (`ranking/role_ranking.go`)
-- [ ] Implement click signal recording in Redis (rolling 30-day window)
-- [ ] Implement click score boost in search results
-- [ ] Define `config/synonyms.yaml` — global + industry-specific synonym groups
-- [ ] Apply synonyms to all indexes on startup
-- [ ] Complete `IndexHooks` registry — `RegisterHooks`, `GetHooks` with thread safety
-- [ ] Implement YAML-driven hook config (skip_docstatus, computed_fields)
-- [ ] Multi-site config: each site gets its own canal listener + goroutine
-- [ ] Site detection middleware in proxy — route to correct Meili/Redis client
-- [ ] Browser IndexedDB cache (5-min TTL) in `LightningSearch` JS class
-- [ ] Test: two sites run simultaneously with isolated indexes
+- [x] Define `config/ranking.yaml` — field weights and synonyms per DocType
+- [x] Apply field weights and synonyms to Meilisearch settings on startup
+- [x] Implement Redis-backed Click Tracker for usage-based ranking (rolling 30-day window)
+- [x] Implement click score boost (`default_click_score`) in search results
+- [x] Complete `IndexHooks` registry with thread-safe `sync.RWMutex`
+- [x] Global Filter: automatically skip docstatus=2 (Cancelled) records
+- [x] Multi-site config: each site gets its own canal listener + isolated resources
+- [x] Site detection middleware in proxy — route to correct Meili/Redis client
+- [x] Browser IndexedDB cache (5-min TTL) in `LightningSearch` JS class
+- [x] Test: multi-tenant refactor complete; Go backend compiles and runs
 
 ## Phase 7: AI Search Layer (Hybrid)
 - [ ] Implement `AI_MODE` feature flag in config

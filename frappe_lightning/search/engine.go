@@ -7,8 +7,10 @@ import (
 
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
+	"frappe_lightning/search/ranking"
 
 	"github.com/meilisearch/meilisearch-go"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -36,18 +38,36 @@ func mapRowToDoc(row []interface{}, columns []string, allowed map[string]bool) m
 	return doc
 }
 
-// InitIndex ensures a Meilisearch index exists with the correct attribute settings.
-func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, site string) error {
+// InitIndex ensures a Meilisearch index exists with the correct attribute settings and ranking rules.
+func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, ranking *config.RankingConfig, site string) error {
 	indexName := schema.IndexName(site)
 	index := client.Index(indexName)
 
+	searchable := schema.Searchable
+	synonyms := make(map[string][]string)
+	rankingRules := []string{"words", "typo", "proximity", "attribute", "sort", "exactness"}
+
+	if ranking != nil {
+		if len(ranking.Global.RankingRules) > 0 {
+			rankingRules = ranking.Global.RankingRules
+		}
+
+		if dtRank, ok := ranking.DocTypes[schema.Name]; ok {
+			if len(dtRank.SearchableAttributes) > 0 {
+				searchable = dtRank.SearchableAttributes
+			}
+			if len(dtRank.Synonyms) > 0 {
+				synonyms = dtRank.Synonyms
+			}
+		}
+	}
+
 	_, err := index.UpdateSettings(&meilisearch.Settings{
-		SearchableAttributes: schema.Searchable,
+		SearchableAttributes: searchable,
 		FilterableAttributes: schema.Filterable,
 		SortableAttributes:   schema.Sortable,
-		RankingRules: []string{
-			"words", "typo", "proximity", "attribute", "sort", "exactness",
-		},
+		RankingRules:         rankingRules,
+		Synonyms:             synonyms,
 	})
 	if err != nil {
 		return fmt.Errorf("InitIndex %s: %w", indexName, err)
@@ -57,22 +77,24 @@ func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, si
 
 // Engine consumes RowEvents and keeps Meilisearch in sync.
 type Engine struct {
-	site    string
-	schemas []config.IndexSchema
-	meili   meilisearch.ServiceManager
-	batcher *Batcher
-	hooks   *HookRegistry
-	log     *zap.Logger
+	site       string
+	schemas    []config.IndexSchema
+	meili      meilisearch.ServiceManager
+	batcher    *Batcher
+	hooks      *HookRegistry
+	clickTracker *ranking.ClickTracker
+	log        *zap.Logger
 }
 
 // NewEngine creates a configured sync engine for a single site.
-func NewEngine(site *config.SiteConfig, schemas []config.IndexSchema, meili meilisearch.ServiceManager, log *zap.Logger) *Engine {
+func NewEngine(site *config.SiteConfig, schemas []config.IndexSchema, meili meilisearch.ServiceManager, rdb *redis.Client, log *zap.Logger) *Engine {
 	e := &Engine{
-		site:    site.Name,
-		schemas: schemas,
-		meili:   meili,
-		hooks:   newHookRegistry(),
-		log:     log,
+		site:         site.Name,
+		schemas:      schemas,
+		meili:        meili,
+		hooks:        newHookRegistry(),
+		clickTracker: ranking.NewClickTracker(rdb, log),
+		log:          log,
 	}
 	dlq := NewDLQManager(log)
 	e.batcher = NewBatcher(e.flushBatch, log, dlq)
@@ -105,6 +127,9 @@ func (e *Engine) process(event *canal.RowEvent) error {
 	case "insert":
 		doc := mapRowToDoc(event.Rows[0], event.Columns, allowed)
 		doc["doctype"] = schema.Name
+		if id, ok := doc["name"].(string); ok {
+			doc["default_click_score"] = e.clickTracker.GetScore(e.site, schema.Name, id)
+		}
 		if !e.hooks.runBeforeIndex(schema.Name, doc) {
 			return nil
 		}
@@ -118,6 +143,9 @@ func (e *Engine) process(event *canal.RowEvent) error {
 		}
 		doc := mapRowToDoc(event.Rows[1], event.Columns, allowed)
 		doc["doctype"] = schema.Name
+		if id, ok := doc["name"].(string); ok {
+			doc["default_click_score"] = e.clickTracker.GetScore(e.site, schema.Name, id)
+		}
 		if !e.hooks.runBeforeIndex(schema.Name, doc) {
 			return nil
 		}

@@ -1,0 +1,40 @@
+doctypes:
+  "Sales Invoice":
+    searchable_attributes:
+      - name
+      - customer_name
+      - grand_total
+      - default_click_score
+    synonyms:
+      "bill": ["invoice"]
+      "unpaid": ["overdue", "due"]
+      
+  "Customer":
+    searchable_attributes:
+      - customer_name
+      - name
+      - customer_group
+      - default_click_score
+    synonyms:
+      "client": ["customer"]
+      "borrower": ["customer"]
+
+  "Item":
+    searchable_attributes:
+      - item_name
+      - item_code
+      - default_click_score
+    synonyms:
+      "product": ["item"]
+      "goods": ["item"]
+
+global:
+  ranking_rules:
+    - "words"
+    - "typo"
+    - "proximity"
+    - "attribute"
+    - "sort"
+    - "exactness"
+    # We inject the Redis behavioral score directly into the document so Meili can sort natively
+    - "custom_click_score:desc"

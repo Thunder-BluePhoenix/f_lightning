@@ -6,28 +6,23 @@ import (
 
 	"frappe_lightning/api/handlers"
 	"frappe_lightning/api/middleware"
-	"frappe_lightning/config"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/meilisearch/meilisearch-go"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-// Server encapsulates the Fiber HTTP server and dependencies.
+// Server encapsulates the Fiber HTTP server and dependencies via Multi-Tenancy.
 type Server struct {
-	app   *fiber.App
-	cfg   *config.SiteConfig
-	meili meilisearch.ServiceManager
-	rdb   *redis.Client
-	log   *zap.Logger
+	app     *fiber.App
+	tenants map[string]*middleware.Tenant
+	log     *zap.Logger
 }
 
-// NewServer initializes the Fiber app with middleware and routes.
-func NewServer(cfg *config.SiteConfig, meili meilisearch.ServiceManager, rdb *redis.Client, log *zap.Logger) *Server {
+// NewServer initializes the Fiber app with multi-tenant middleware and routes.
+func NewServer(tenants map[string]*middleware.Tenant, log *zap.Logger) *Server {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -40,7 +35,7 @@ func NewServer(cfg *config.SiteConfig, meili meilisearch.ServiceManager, rdb *re
 		},
 	})
 
-	s := &Server{app: app, cfg: cfg, meili: meili, rdb: rdb, log: log}
+	s := &Server{app: app, tenants: tenants, log: log}
 	s.setupMiddleware()
 	s.setupRoutes()
 	return s
@@ -50,22 +45,16 @@ func (s *Server) setupMiddleware() {
 	// Panic recovery
 	s.app.Use(recover.New())
 
-	// CORS whitelist based on config
-	origins := ""
-	if s.cfg.API.AllowedOrigins != "" {
-		origins = s.cfg.API.AllowedOrigins
-	} else {
-		origins = "*"
-	}
+	// CORS whitelist based on config (globally loose for multi-tenant, strict via Nginx in production)
 	s.app.Use(cors.New(cors.Config{
-		AllowOrigins:     origins,
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowOrigins:     "*",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Frappe-Site-Name",
 		AllowCredentials: true,
 	}))
 
-	// Rate Limiting (100 requests per 10 seconds per IP implies high burst capacity but caps abuse)
+	// Rate Limiting
 	s.app.Use(limiter.New(limiter.Config{
-		Max:        100,
+		Max:        150,
 		Expiration: 10 * time.Second,
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.IP()
@@ -77,14 +66,8 @@ func (s *Server) setupMiddleware() {
 		},
 	}))
 
-	// Inject Site, Meilisearch, Redis and Logger into context for handlers
-	s.app.Use(func(c *fiber.Ctx) error {
-		c.Locals("site", s.cfg.Name)
-		c.Locals("meili", s.meili)
-		c.Locals("redis", s.rdb)
-		c.Locals("log", s.log)
-		return c.Next()
-	})
+	// Resolve the Site Context centrally for all endpoints
+	s.app.Use(middleware.SiteResolver(s.tenants, s.log))
 }
 
 func (s *Server) setupRoutes() {
@@ -101,10 +84,10 @@ func (s *Server) setupRoutes() {
 	protected.Post("/analytics/click", handlers.LogClick)
 }
 
-// Start listens on the configured port. Blocks until error or shutdown.
-func (s *Server) Start() error {
-	addr := fmt.Sprintf(":%d", s.cfg.API.Port)
-	s.log.Info("starting API server", zap.String("site", s.cfg.Name), zap.String("addr", addr))
+// Start listens on the generic fallback port (e.g. 8765) or Frappe configuration default.
+func (s *Server) Start(port int) error {
+	addr := fmt.Sprintf(":%d", port)
+	s.log.Info("starting global Multi-Tenant API server", zap.String("addr", addr), zap.Int("tenants_initialized", len(s.tenants)))
 	return s.app.Listen(addr)
 }
 

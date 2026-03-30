@@ -1,9 +1,14 @@
 package handlers
 
 import (
+	"fmt"
+
+	"frappe_lightning/search/ranking"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 // Suggest returns autocomplete hints like top queried terms.
@@ -71,8 +76,31 @@ func LogClick(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid format"})
 	}
 
-	// In Phase 6, we write this click signal to Redis to boost the popularity
-	// score of this DocType+Name combination.
-	// For now, return success.
+	site := c.Locals("site").(string)
+	rdb := c.Locals("redis").(*redis.Client)
+	meili := c.Locals("meili").(meilisearch.ServiceManager)
+	log := c.Locals("log").(*zap.Logger)
+
+	// 1. Log click to Redis tracker
+	tracker := ranking.NewClickTracker(rdb, log)
+	tracker.LogClick(site, body.DocType, body.Name)
+
+	// 2. Fetch new score
+	newScore := tracker.GetScore(site, body.DocType, body.Name)
+
+	// 3. Fire lightning-fast partial document update to Meilisearch directly
+	indexName := fmt.Sprintf("%s_%s", slugify(site), slugify(body.DocType))
+	go func() {
+		doc := map[string]interface{}{
+			"name":                body.Name,
+			"default_click_score": newScore,
+		}
+		pk := "name"
+		_, err := meili.Index(indexName).UpdateDocuments([]map[string]interface{}{doc}, &meilisearch.DocumentOptions{PrimaryKey: &pk})
+		if err != nil {
+			log.Warn("failed to push click score to meili", zap.Error(err), zap.String("doc", body.Name))
+		}
+	}()
+
 	return c.SendStatus(202)
 }

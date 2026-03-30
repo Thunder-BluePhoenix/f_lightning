@@ -10,6 +10,7 @@
         this.results = [];
         this.selectedIndex = -1;
         this.debounceTimer = null;
+        this.cache = new SearchCache('ls_cache', 5); // 5 minute TTL
 
         this.initDOM();
         this.bindEvents();
@@ -118,7 +119,14 @@
 
     async search(query) {
         try {
-            // Include credentials so Frappe's `sid` cookie is sent to the Go proxy
+            // 1. Check local cache first
+            const cached = await this.cache.get(query);
+            if (cached) {
+                this.render(cached, true); // true for 'cached' indicator
+                return;
+            }
+
+            // 2. Fetch from Go Proxy
             const res = await fetch(`http://${window.location.hostname}:${this.apiPort}/api/v1/search?q=${encodeURIComponent(query)}`, {
                 credentials: 'include'
             });
@@ -126,6 +134,10 @@
             if (!res.ok) throw new Error('Search failed');
 
             const data = await res.json();
+            
+            // 3. Store in cache
+            await this.cache.set(query, data);
+            
             this.render(data);
         } catch (err) {
             console.error('Lightning Search Error:', err);
@@ -135,7 +147,7 @@
         }
     }
 
-    render(data) {
+    render(data, isCached = false) {
         this.body.style.display = 'block';
         
         if (!data.hits || data.hits.length === 0) {
@@ -146,7 +158,7 @@
 
         // Display parsed NLP syntax in the top right meta bar
         const p = data.parsed;
-        let metaHtml = `<span style="color:var(--ls-text-muted)">⚡ ${data.took_ms}ms</span>`;
+        let metaHtml = `<span style="color:var(--ls-text-muted)">⚡ ${isCached ? 'cached' : data.took_ms + 'ms'}</span>`;
         if (p) {
             if (p.doctype) metaHtml += `<span class="ls-pill">${p.doctype}</span>`;
             if (p.filters && p.filters.length) metaHtml += `<span class="ls-pill">Filters: ${p.filters.length}</span>`;
@@ -236,6 +248,67 @@
                 query: this.input.value
             })
         }).catch(() => {}); // fire and forget
+    }
+}
+
+/**
+ * SearchCache helper for IndexedDB persistence
+ */
+class SearchCache {
+    constructor(dbName, ttlMinutes) {
+        this.dbName = dbName;
+        this.ttl = ttlMinutes * 60 * 1000;
+        this.db = null;
+    }
+
+    async getDb() {
+        if (this.db) return this.db;
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('search')) {
+                    db.createObjectStore('search', { keyPath: 'query' });
+                }
+            };
+            request.onsuccess = (e) => {
+                this.db = e.target.result;
+                resolve(this.db);
+            };
+            request.onerror = (e) => reject(e.target.error);
+        });
+    }
+
+    async get(query) {
+        const db = await this.getDb();
+        return new Promise((resolve) => {
+            const transaction = db.transaction(['search'], 'readonly');
+            const store = transaction.objectStore('search');
+            const request = store.get(query);
+            request.onsuccess = () => {
+                const result = request.result;
+                if (result && (Date.now() - result.timestamp < this.ttl)) {
+                    resolve(result.data);
+                } else {
+                    resolve(null);
+                }
+            };
+            request.onerror = () => resolve(null);
+        });
+    }
+
+    async set(query, data) {
+        const db = await this.getDb();
+        return new Promise((resolve) => {
+            const transaction = db.transaction(['search'], 'readwrite');
+            const store = transaction.objectStore('search');
+            store.put({
+                query: query,
+                data: data,
+                timestamp: Date.now()
+            });
+            transaction.oncomplete = () => resolve();
+        });
     }
 }
 

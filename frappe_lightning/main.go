@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"frappe_lightning/api"
+	"frappe_lightning/api/middleware"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
 	"frappe_lightning/search"
@@ -37,7 +38,15 @@ func main() {
 		log.Fatal("failed to load config", zap.Error(err))
 	}
 
+	rankingCfg, err := config.LoadRanking("config/ranking.yaml")
+	if err != nil {
+		log.Warn("failed to load ranking config - using defaults", zap.Error(err))
+	}
+
 	schemas := config.DefaultSchemas()
+
+	tenants := make(map[string]*middleware.Tenant)
+	var primaryAPIPort int = 8765 // default fallback
 
 	// --- Start one listener + engine per site ---
 	for i := range cfg.Sites {
@@ -51,7 +60,7 @@ func main() {
 
 		// Initialize all tracked indexes in Meilisearch
 		for j := range schemas {
-			if err := search.InitIndex(meiliClient, &schemas[j], site.Name); err != nil {
+			if err := search.InitIndex(meiliClient, &schemas[j], rankingCfg, site.Name); err != nil {
 				log.Warn("failed to init index",
 					zap.String("site", site.Name),
 					zap.String("index", schemas[j].IndexSuffix),
@@ -68,8 +77,13 @@ func main() {
 		// Shared channel: binlog listener → sync engine
 		eventsCh := make(chan *canal.RowEvent, 1024)
 
-		// Sync engine (consumes events, writes to Meilisearch)
-		engine := search.NewEngine(site, schemas, meiliClient, log)
+		// Redis client (for Frappe session validation and click signals)
+		rdb := redis.NewClient(&redis.Options{
+			Addr: site.Redis.Addr(),
+		})
+
+		// Sync engine (consumes events, writes to Meilisearch, requires redis for ClickTracker)
+		engine := search.NewEngine(site, schemas, meiliClient, rdb, log)
 		go engine.Start(eventsCh)
 
 		// Binlog listener (produces events from MariaDB)
@@ -82,29 +96,34 @@ func main() {
 			}
 		}(site)
 
-		// Redis client (for Frappe session validation)
-		rdb := redis.NewClient(&redis.Options{
-			Addr: site.Redis.Addr(),
-		})
-
-		// API HTTP Server
-		server := api.NewServer(site, meiliClient, rdb, log)
-		go func(s *api.Server) {
-			if err := s.Start(); err != nil {
-				log.Error("API server stopped", zap.Error(err))
-			}
-		}(server)
-
-		log.Info("site started",
+		// Log execution
+		log.Info("site pipeline started",
 			zap.String("site", site.Name),
 			zap.String("mariadb", fmt.Sprintf("%s:%d", site.MariaDB.Host, site.MariaDB.Port)),
 			zap.String("meilisearch", site.Meilisearch.Host),
 			zap.String("redis", site.Redis.Addr()),
-			zap.Int("api_port", site.API.Port),
 		)
+
+		tenants[site.Name] = &middleware.Tenant{
+			Config: site,
+			Meili:  meiliClient,
+			Redis:  rdb,
+		}
+
+		if site.API.Port > 0 {
+			primaryAPIPort = site.API.Port
+		}
 	}
 
-	log.Info("⚡ Lightning is running — waiting for binlog events and HTTP requests")
+	// 5. Spin up global Multi-Tenant HTTP Server
+	server := api.NewServer(tenants, log)
+	go func() {
+		if err := server.Start(primaryAPIPort); err != nil {
+			log.Error("API server stopped", zap.Error(err))
+		}
+	}()
+
+	log.Info("⚡ Lightning is running — multi-tenant mode active")
 
 	// --- Graceful shutdown on SIGINT / SIGTERM ---
 	quit := make(chan os.Signal, 1)
