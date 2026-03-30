@@ -1,0 +1,36 @@
+sites:
+  - name: erp.local
+    mariadb:
+      host: 127.0.0.1
+      port: 3306
+      user: lightning
+      password: strong_password
+      server_id: 100          # Must be unique across all MySQL replication clients
+    meilisearch:
+      host: http://localhost:7700
+      master_key: your-master-key-here
+    redis:
+      host: localhost
+      port: 11000              # Frappe's Redis cache port (bench default)
+    api:
+      port: 8765
+      allowed_origins: "http://localhost:8000"   # Your Frappe site URL
+    doctypes:
+      - name: Sales Invoice
+        table: "tabSales Invoice"
+      - name: Customer
+        table: tabCustomer
+      - name: Item
+        table: tabItem
+      - name: Purchase Order
+        table: "tabPurchase Order"
+      - name: Supplier
+        table: tabSupplier
+      - name: Lead
+        table: tabLead
+
+# AI mode: off | local | cloud
+# off   = rule-based NLP only (fastest, zero external deps, default)
+# local = rule-based NLP + local sentence-transformers embeddings
+# cloud = rule-based NLP + cloud LLM (OpenAI / Gemini / Ollama)
+ai_mode: off
