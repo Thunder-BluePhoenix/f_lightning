@@ -118,6 +118,7 @@ func main() {
 			Redis:    rdb,
 			AIMode:   cfg.AIMode,
 			Embedder: embedder,
+			APIToken: cfg.APIToken,
 		}
 
 		if site.API.Port > 0 {
@@ -140,5 +141,12 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Info("⚡ Lightning shutting down gracefully")
+	log.Info("⚡ Lightning shutting down gracefully...")
+
+	// 1. Stop API Server
+	if err := server.Stop(); err != nil {
+		log.Error("failed to stop API server", zap.Error(err))
+	}
+
+	log.Info("⚡ Lightning shut down")
 }

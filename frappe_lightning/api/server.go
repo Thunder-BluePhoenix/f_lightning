@@ -11,7 +11,9 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 // Server encapsulates the Fiber HTTP server and dependencies via Multi-Tenancy.
@@ -66,18 +68,27 @@ func (s *Server) setupMiddleware() {
 		},
 	}))
 
-	// Resolve the Site Context centrally for all endpoints
-	s.app.Use(middleware.SiteResolver(s.tenants, s.log))
+	// NOTE: SiteResolver is now applied to specific API groups to allow
+	// global endpoints like /metrics and /health to function without a site context.
 }
 
 func (s *Server) setupRoutes() {
+	// Global Metrics (No Site Context required)
+	s.app.Get("/metrics", func(c *fiber.Ctx) error {
+		fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler())(c.Context())
+		return nil
+	})
+
 	v1 := s.app.Group("/api/v1")
 
 	// Public (No Auth)
 	v1.Get("/health", handlers.HealthCheck)
 
-	// Protected Routes
-	protected := v1.Group("", middleware.AuthRequired)
+	// Tenant-Aware Routes (Require SiteResolver)
+	tenantAware := v1.Group("", middleware.SiteResolver(s.tenants, s.log))
+
+	// Protected Routes (Require Auth)
+	protected := tenantAware.Group("", middleware.AuthRequired)
 	protected.Get("/search", handlers.Search)
 	protected.Get("/suggest", handlers.Suggest)
 	protected.Get("/autocomplete", handlers.Autocomplete)

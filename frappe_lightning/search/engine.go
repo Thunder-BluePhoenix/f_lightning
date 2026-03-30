@@ -8,6 +8,7 @@ import (
 	"frappe_lightning/ai"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
+	"frappe_lightning/search/metrics"
 	"frappe_lightning/search/ranking"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -121,6 +122,12 @@ func NewEngine(site *config.SiteConfig, schemas []config.IndexSchema, meili meil
 // Start reads events from ch and processes them. Blocks until ch is closed.
 func (e *Engine) Start(ch <-chan *canal.RowEvent) {
 	for event := range ch {
+		// Update replication lag metric (MariaDB event timestamp vs current local time)
+		if event.Timestamp > 0 {
+			lagSeconds := float64(time.Now().Unix()) - float64(event.Timestamp)
+			metrics.BinlogLag.WithLabelValues(e.site).Set(lagSeconds)
+		}
+
 		if err := e.process(event); err != nil {
 			e.log.Error("failed to process event",
 				zap.String("table", event.Table),
@@ -158,10 +165,13 @@ func (e *Engine) process(event *canal.RowEvent) error {
 			// In production, we'd pick key fields like customer_name, item_name, etc.
 			if emb, err := e.embedder.Embed(summary); err == nil {
 				doc["_vectors"] = map[string][]float32{"default": emb}
+			} else {
+				metrics.IndexingErrors.WithLabelValues(e.site, schema.Name).Inc()
 			}
 		}
 
 		e.batcher.Add(indexName, doc)
+		metrics.IndexingTotal.WithLabelValues(e.site, schema.Name, "insert").Inc()
 
 	case "update":
 		// Binlog UPDATE delivers [before_row, after_row]
@@ -183,16 +193,20 @@ func (e *Engine) process(event *canal.RowEvent) error {
 			summary := fmt.Sprintf("%v", doc)
 			if emb, err := e.embedder.Embed(summary); err == nil {
 				doc["_vectors"] = map[string][]float32{"default": emb}
+			} else {
+				metrics.IndexingErrors.WithLabelValues(e.site, schema.Name).Inc()
 			}
 		}
 
 		e.batcher.Add(indexName, doc)
+		metrics.IndexingTotal.WithLabelValues(e.site, schema.Name, "update").Inc()
 
 	case "delete":
 		doc := mapRowToDoc(event.Rows[0], event.Columns, allowed)
 		if id, ok := doc["name"].(string); ok && id != "" {
 			_, err := e.meili.Index(indexName).DeleteDocument(id, nil)
 			if err != nil {
+				metrics.IndexingErrors.WithLabelValues(e.site, schema.Name).Inc()
 				e.log.Warn("failed to delete document",
 					zap.String("index", indexName),
 					zap.String("name", id),

@@ -36,3 +36,4 @@ sites:
 ai_mode: off
 embedding_server_url: "http://localhost:5000/embed"
 vector_dimensions: 384
+api_token: "lightning-secret-dev"

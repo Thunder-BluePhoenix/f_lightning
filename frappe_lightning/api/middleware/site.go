@@ -19,6 +19,7 @@ type Tenant struct {
 	Redis    *redis.Client
 	AIMode   string
 	Embedder *ai.Embedder
+	APIToken string // Global token passed to tenant context
 }
 
 // SiteResolver automatically detects the Frappe Site name from the request context
@@ -59,6 +60,7 @@ func SiteResolver(tenants map[string]*Tenant, log *zap.Logger) fiber.Handler {
 		c.Locals("redis", tenant.Redis)
 		c.Locals("ai_mode", tenant.AIMode)
 		c.Locals("embedder", tenant.Embedder)
+		c.Locals("api_token", tenant.APIToken)
 		c.Locals("log", log.With(zap.String("site", tenant.Config.Name)))
 
 		return c.Next()

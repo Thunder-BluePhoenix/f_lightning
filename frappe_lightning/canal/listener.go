@@ -14,11 +14,12 @@ import (
 
 // RowEvent is the normalised event sent downstream to the sync engine.
 type RowEvent struct {
-	Site    string
-	Table   string                   // e.g. "tabSales Invoice"
-	Action  string                   // insert | update | delete
-	Columns []string                 // Column names in order
-	Rows    [][]interface{}          // Raw cell values
+	Site      string
+	Table     string          // e.g. "tabSales Invoice"
+	Action    string          // insert | update | delete
+	Columns   []string        // Column names in order
+	Rows      [][]interface{} // Raw cell values
+	Timestamp uint32          // Binlog event timestamp (seconds)
 }
 
 // Handler implements canal.EventHandler and forwards row events to a channel.
@@ -55,11 +56,12 @@ func (h *Handler) OnRow(e *gomysql.RowsEvent) error {
 	)
 
 	h.eventsCh <- &RowEvent{
-		Site:    h.site,
-		Table:   tableName,
-		Action:  action,
-		Columns: cols,
-		Rows:    e.Rows,
+		Site:      h.site,
+		Table:     tableName,
+		Action:    action,
+		Columns:   cols,
+		Rows:      e.Rows,
+		Timestamp: e.Header.Timestamp,
 	}
 	return nil
 }

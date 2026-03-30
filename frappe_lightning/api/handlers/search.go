@@ -8,6 +8,7 @@ import (
 	"frappe_lightning/ai"
 	"frappe_lightning/api/rbac"
 	"frappe_lightning/nlp"
+	"frappe_lightning/search/metrics"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/meilisearch/meilisearch-go"
@@ -95,6 +96,7 @@ func Search(c *fiber.Ctx) error {
 	}
 
 	tookMs := time.Since(start).Milliseconds()
+	metrics.SearchDuration.WithLabelValues(site).Observe(float64(tookMs) / 1000.0)
 
 	// Fire async tracking log
 	go logSearchAsync(site, user, q, parsedQuery.DocType, int(res.TotalHits), int(tookMs))

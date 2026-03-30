@@ -25,9 +25,9 @@ func AuthRequired(c *fiber.Ctx) error {
 	authHeader := c.Get("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		// In a real implementation this would check a token table/cache.
-		// For now we simulate an admin token bypass.
-		if token == "dev-token-xyz" {
+		apiToken := c.Locals("api_token").(string)
+
+		if apiToken != "" && token == apiToken {
 			c.Locals("user", "api_user")
 			c.Locals("roles", []string{"System Manager", "Search API User"})
 			return c.Next()
