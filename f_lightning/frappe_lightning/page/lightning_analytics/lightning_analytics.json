@@ -1,0 +1,19 @@
+{
+ "content": null,
+ "creation": "2026-03-30 23:34:32.087809",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-03-30 23:34:32.087809",
+ "modified_by": "Administrator",
+ "module": "Frappe Lightning",
+ "name": "lightning-analytics",
+ "owner": "Administrator",
+ "page_name": "lightning-analytics",
+ "roles": [],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Lightning Search Analytics"
+}

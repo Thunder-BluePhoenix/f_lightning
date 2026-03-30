@@ -42,9 +42,9 @@
 - [x] Implement keyboard navigation (↑↓ Enter Esc)
 - [x] Implement inline latency display (`⚡ Xms`)
 - [x] Implement graceful degradation (fallback to Frappe native search)
-- [ ] Create `Lightning Search Log` Frappe DocType
-- [ ] Implement Python analytics API (`get_analytics_data`)
-- [ ] Build Analytics Frappe Page: top searches, zero-results, latency trend, CTR
+- [x] Create `Lightning Search Log` Frappe DocType
+- [x] Implement Python analytics API (`get_analytics_data`)
+- [x] Build Analytics Frappe Page: top searches, zero-results, latency trend, CTR
 
 ## Phase 5: NLP Rule Engine & Advanced Query Language
 - [x] Create `nlp/models.go` — `Query{}` and `Filter{}` DSL structs
