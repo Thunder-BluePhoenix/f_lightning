@@ -23,14 +23,14 @@
 - [ ] Test: 100k row backfill completes; binlog resumes after restart
 
 ## Phase 3: Search API Proxy & Auth
-- [ ] Set up Fiber HTTP server with CORS, rate limiting, recovery middleware
-- [ ] Implement `AuthMiddleware` — Frappe `sid` cookie → Redis session validation
-- [ ] Implement `BuildPermissionFilters` RBAC — per-role Meilisearch filter injection
-- [ ] Implement `GET /api/v1/search` handler — NLP + RBAC + Meilisearch + analytics log
-- [ ] Implement `GET /api/v1/suggest` handler — multi-index quick search
-- [ ] Implement `GET /api/v1/autocomplete` handler — faceted by DocType
-- [ ] Implement `GET /api/v1/health` handler — Meilisearch + Redis status
-- [ ] Implement `POST /api/v1/analytics/click` — click signal recording
+- [x] Set up Fiber HTTP server with CORS, rate limiting, recovery middleware
+- [x] Implement `AuthMiddleware` — Frappe `sid` cookie → Redis session validation
+- [x] Implement `BuildPermissionFilters` RBAC — per-role Meilisearch filter injection
+- [x] Implement `GET /api/v1/search` handler — NLP + RBAC + Meilisearch + analytics log
+- [x] Implement `GET /api/v1/suggest` handler — multi-index quick search
+- [x] Implement `GET /api/v1/autocomplete` handler — faceted by DocType
+- [x] Implement `GET /api/v1/health` handler — Meilisearch + Redis status
+- [x] Implement `POST /api/v1/analytics/click` — click signal recording
 - [ ] Test: invalid session → 401; valid session → results <10ms
 
 ## Phase 4: Frappe Frontend UI & Analytics

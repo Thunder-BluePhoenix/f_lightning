@@ -7,11 +7,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"frappe_lightning/api"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
 	"frappe_lightning/search"
 
 	"github.com/meilisearch/meilisearch-go"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -80,14 +82,29 @@ func main() {
 			}
 		}(site)
 
+		// Redis client (for Frappe session validation)
+		rdb := redis.NewClient(&redis.Options{
+			Addr: site.Redis.Addr(),
+		})
+
+		// API HTTP Server
+		server := api.NewServer(site, meiliClient, rdb, log)
+		go func(s *api.Server) {
+			if err := s.Start(); err != nil {
+				log.Error("API server stopped", zap.Error(err))
+			}
+		}(server)
+
 		log.Info("site started",
 			zap.String("site", site.Name),
 			zap.String("mariadb", fmt.Sprintf("%s:%d", site.MariaDB.Host, site.MariaDB.Port)),
 			zap.String("meilisearch", site.Meilisearch.Host),
+			zap.String("redis", site.Redis.Addr()),
+			zap.Int("api_port", site.API.Port),
 		)
 	}
 
-	log.Info("⚡ Lightning is running — waiting for binlog events")
+	log.Info("⚡ Lightning is running — waiting for binlog events and HTTP requests")
 
 	// --- Graceful shutdown on SIGINT / SIGTERM ---
 	quit := make(chan os.Signal, 1)
