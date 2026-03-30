@@ -16,9 +16,9 @@
 - [x] Implement index initialization — apply searchable/filterable/sortable settings on startup
 - [x] Implement INSERT, UPDATE, DELETE event handlers in `search/processor.go`
 - [x] Implement `search/batcher.go` — 100-doc / 500ms buffer with exponential backoff retry
-- [ ] Implement dead letter queue for permanently failed events
+- [x] Implement dead letter queue for permanently failed events
 - [x] Implement binlog position save/load (`canal/position.go`)
-- [ ] Implement `cmd/backfill.go` — paginated full-sync with progress display
+- [x] Implement `cmd/backfill.go` — paginated full-sync with progress display
 - [x] Implement `IndexHooks` — `BeforeIndex` and `TransformDoc` per DocType
 - [ ] Test: 100k row backfill completes; binlog resumes after restart
 
