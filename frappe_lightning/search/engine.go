@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"frappe_lightning/ai"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
 	"frappe_lightning/search/ranking"
@@ -39,7 +40,7 @@ func mapRowToDoc(row []interface{}, columns []string, allowed map[string]bool) m
 }
 
 // InitIndex ensures a Meilisearch index exists with the correct attribute settings and ranking rules.
-func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, ranking *config.RankingConfig, site string) error {
+func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, ranking *config.RankingConfig, site string, aiMode string, dims int) error {
 	indexName := schema.IndexName(site)
 	index := client.Index(indexName)
 
@@ -62,13 +63,25 @@ func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, ra
 		}
 	}
 
-	_, err := index.UpdateSettings(&meilisearch.Settings{
+	settings := &meilisearch.Settings{
 		SearchableAttributes: searchable,
 		FilterableAttributes: schema.Filterable,
 		SortableAttributes:   schema.Sortable,
 		RankingRules:         rankingRules,
 		Synonyms:             synonyms,
-	})
+	}
+
+	// Enable Vector Search if AI mode is local
+	if aiMode == "local" {
+		settings.Embedders = map[string]meilisearch.Embedder{
+			"default": {
+				Source: "userProvided",
+				Dimensions: dims,
+			},
+		}
+	}
+
+	_, err := index.UpdateSettings(settings)
 	if err != nil {
 		return fmt.Errorf("InitIndex %s: %w", indexName, err)
 	}
@@ -77,23 +90,27 @@ func InitIndex(client meilisearch.ServiceManager, schema *config.IndexSchema, ra
 
 // Engine consumes RowEvents and keeps Meilisearch in sync.
 type Engine struct {
-	site       string
-	schemas    []config.IndexSchema
-	meili      meilisearch.ServiceManager
-	batcher    *Batcher
-	hooks      *HookRegistry
+	site         string
+	schemas      []config.IndexSchema
+	meili        meilisearch.ServiceManager
+	batcher      *Batcher
+	hooks        *HookRegistry
 	clickTracker *ranking.ClickTracker
-	log        *zap.Logger
+	embedder     *ai.Embedder
+	aiMode       string
+	log          *zap.Logger
 }
 
 // NewEngine creates a configured sync engine for a single site.
-func NewEngine(site *config.SiteConfig, schemas []config.IndexSchema, meili meilisearch.ServiceManager, rdb *redis.Client, log *zap.Logger) *Engine {
+func NewEngine(site *config.SiteConfig, schemas []config.IndexSchema, meili meilisearch.ServiceManager, rdb *redis.Client, aiMode string, embedder *ai.Embedder, log *zap.Logger) *Engine {
 	e := &Engine{
 		site:         site.Name,
 		schemas:      schemas,
 		meili:        meili,
 		hooks:        newHookRegistry(),
 		clickTracker: ranking.NewClickTracker(rdb, log),
+		embedder:     embedder,
+		aiMode:       aiMode,
 		log:          log,
 	}
 	dlq := NewDLQManager(log)
@@ -134,6 +151,16 @@ func (e *Engine) process(event *canal.RowEvent) error {
 			return nil
 		}
 		doc = e.hooks.runTransformDoc(schema.Name, doc)
+
+		// Generate embedding if AI mode is local
+		if e.aiMode == "local" && e.embedder != nil {
+			summary := fmt.Sprintf("%v", doc) // Simple trick: embed everything for now
+			// In production, we'd pick key fields like customer_name, item_name, etc.
+			if emb, err := e.embedder.Embed(summary); err == nil {
+				doc["_vectors"] = map[string][]float32{"default": emb}
+			}
+		}
+
 		e.batcher.Add(indexName, doc)
 
 	case "update":
@@ -150,6 +177,15 @@ func (e *Engine) process(event *canal.RowEvent) error {
 			return nil
 		}
 		doc = e.hooks.runTransformDoc(schema.Name, doc)
+
+		// Generate embedding if AI mode is local
+		if e.aiMode == "local" && e.embedder != nil {
+			summary := fmt.Sprintf("%v", doc)
+			if emb, err := e.embedder.Embed(summary); err == nil {
+				doc["_vectors"] = map[string][]float32{"default": emb}
+			}
+		}
+
 		e.batcher.Add(indexName, doc)
 
 	case "delete":

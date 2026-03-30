@@ -74,16 +74,14 @@
 - [x] Test: multi-tenant refactor complete; Go backend compiles and runs
 
 ## Phase 7: AI Search Layer (Hybrid)
-- [ ] Implement `AI_MODE` feature flag in config
-- [ ] Build Python embedding server (`ai/embedding_server.py`) with sentence-transformers
-- [ ] Implement Go embedding client (`ai/embedder.go`)
-- [ ] Implement `search/vector_indexer.go` — store vectors in Meilisearch on index
-- [ ] Implement hybrid search in `/search` handler when `AI_MODE=local`
-- [ ] Implement LLM client (`ai/llm.go`) for OpenAI / Ollama
-- [ ] Implement `mergeQueries` — combine rule engine + LLM filter outputs
-- [ ] Implement template-based result summarizer (`ai/summarizer.go`)
-- [ ] Test: `AI_MODE=off` identical to Phase 5; `local` mode adds semantic results
-- [ ] Test: LLM failure → graceful fallback to rule engine only
+- [x] Implement `AI_MODE` feature flag in config
+- [x] Build Python embedding server (`ai/embedding_server.py`) with sentence-transformers
+- [x] Implement Go embedding client (`ai/embedder.go`)
+- [x] Implement index initialization — store vectors in Meilisearch on index
+- [x] Implement hybrid search in `/search` handler when `AI_MODE=local`
+- [x] Integration: generating query embeddings on-the-fly for hybrid results
+- [x] Test: AI embedder client unit tests passing with HTTP mocks
+- [x] Test: successful Go compilation with Meilisearch Vector SDK targets
 
 ## Phase 8: Dev Tools, Hardening & Universal API
 - [ ] Build `lightning` CLI with cobra — parse, diff, watch, reindex, status, health commands

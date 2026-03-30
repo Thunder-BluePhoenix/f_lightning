@@ -3,6 +3,7 @@ package middleware
 import (
 	"strings"
 
+	"frappe_lightning/ai"
 	"frappe_lightning/config"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,9 +14,11 @@ import (
 
 // Tenant represents a single connected Frappe site and its resource pools.
 type Tenant struct {
-	Config *config.SiteConfig
-	Meili  meilisearch.ServiceManager
-	Redis  *redis.Client
+	Config   *config.SiteConfig
+	Meili    meilisearch.ServiceManager
+	Redis    *redis.Client
+	AIMode   string
+	Embedder *ai.Embedder
 }
 
 // SiteResolver automatically detects the Frappe Site name from the request context
@@ -54,6 +57,8 @@ func SiteResolver(tenants map[string]*Tenant, log *zap.Logger) fiber.Handler {
 		c.Locals("site", tenant.Config.Name)
 		c.Locals("meili", tenant.Meili)
 		c.Locals("redis", tenant.Redis)
+		c.Locals("ai_mode", tenant.AIMode)
+		c.Locals("embedder", tenant.Embedder)
 		c.Locals("log", log.With(zap.String("site", tenant.Config.Name)))
 
 		return c.Next()

@@ -9,8 +9,10 @@ import (
 
 // Config is the root configuration loaded from config.yaml.
 type Config struct {
-	Sites  []SiteConfig `yaml:"sites"`
-	AIMode string       `yaml:"ai_mode"` // off | local | cloud
+	Sites               []SiteConfig `yaml:"sites"`
+	AIMode              string       `yaml:"ai_mode"`              // off | local | cloud
+	EmbeddingServerURL  string       `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
+	VectorDimensions    int          `yaml:"vector_dimensions"`    // default 384 for MiniLM
 }
 
 // SiteConfig holds per-site configuration.
@@ -82,6 +84,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.AIMode == "" {
 		cfg.AIMode = "off"
+	}
+	if cfg.VectorDimensions == 0 {
+		cfg.VectorDimensions = 384
+	}
+	if cfg.EmbeddingServerURL == "" {
+		cfg.EmbeddingServerURL = "http://localhost:5000/embed"
 	}
 	return &cfg, nil
 }

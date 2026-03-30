@@ -34,3 +34,5 @@ sites:
 # local = rule-based NLP + local sentence-transformers embeddings
 # cloud = rule-based NLP + cloud LLM (OpenAI / Gemini / Ollama)
 ai_mode: off
+embedding_server_url: "http://localhost:5000/embed"
+vector_dimensions: 384

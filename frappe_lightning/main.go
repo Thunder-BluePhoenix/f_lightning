@@ -9,6 +9,7 @@ import (
 
 	"frappe_lightning/api"
 	"frappe_lightning/api/middleware"
+	"frappe_lightning/ai"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
 	"frappe_lightning/search"
@@ -45,6 +46,13 @@ func main() {
 
 	schemas := config.DefaultSchemas()
 
+	// --- AI Embedder (shared across sites) ---
+	var embedder *ai.Embedder
+	if cfg.AIMode == "local" {
+		embedder = ai.NewEmbedder(cfg.EmbeddingServerURL)
+		log.Info("AI Hybrid mode enabled", zap.String("server", cfg.EmbeddingServerURL))
+	}
+
 	tenants := make(map[string]*middleware.Tenant)
 	var primaryAPIPort int = 8765 // default fallback
 
@@ -60,7 +68,7 @@ func main() {
 
 		// Initialize all tracked indexes in Meilisearch
 		for j := range schemas {
-			if err := search.InitIndex(meiliClient, &schemas[j], rankingCfg, site.Name); err != nil {
+			if err := search.InitIndex(meiliClient, &schemas[j], rankingCfg, site.Name, cfg.AIMode, cfg.VectorDimensions); err != nil {
 				log.Warn("failed to init index",
 					zap.String("site", site.Name),
 					zap.String("index", schemas[j].IndexSuffix),
@@ -83,7 +91,7 @@ func main() {
 		})
 
 		// Sync engine (consumes events, writes to Meilisearch, requires redis for ClickTracker)
-		engine := search.NewEngine(site, schemas, meiliClient, rdb, log)
+		engine := search.NewEngine(site, schemas, meiliClient, rdb, cfg.AIMode, embedder, log)
 		go engine.Start(eventsCh)
 
 		// Binlog listener (produces events from MariaDB)
@@ -105,9 +113,11 @@ func main() {
 		)
 
 		tenants[site.Name] = &middleware.Tenant{
-			Config: site,
-			Meili:  meiliClient,
-			Redis:  rdb,
+			Config:   site,
+			Meili:    meiliClient,
+			Redis:    rdb,
+			AIMode:   cfg.AIMode,
+			Embedder: embedder,
 		}
 
 		if site.API.Port > 0 {

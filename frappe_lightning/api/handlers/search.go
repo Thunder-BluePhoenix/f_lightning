@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"frappe_lightning/ai"
 	"frappe_lightning/api/rbac"
 	"frappe_lightning/nlp"
 
@@ -25,6 +26,8 @@ func Search(c *fiber.Ctx) error {
 	meili := c.Locals("meili").(meilisearch.ServiceManager)
 	user := c.Locals("user").(string)
 	roles := c.Locals("roles").([]string)
+	aiMode := c.Locals("ai_mode").(string)
+	embedder := c.Locals("embedder").(*ai.Embedder)
 	log := c.Locals("log").(*zap.Logger)
 
 	start := time.Now()
@@ -70,6 +73,21 @@ func Search(c *fiber.Ctx) error {
 		req.Filter = filterStrs
 	}
 
+	// 7. Add Vector (Hybrid Search) if AI mode is local
+	if aiMode == "local" && embedder != nil {
+		emb, err := embedder.Embed(parsedQuery.Text)
+		if err == nil {
+			req.Vector = emb
+			// In hybrid search, we can also adjust ranking score
+			req.Hybrid = &meilisearch.SearchRequestHybrid{
+				SemanticRatio: 0.5, // Balance keyword vs semantic
+				Embedder:      "default",
+			}
+		} else {
+			log.Warn("embedding failed, falling back to keyword search", zap.Error(err))
+		}
+	}
+
 	res, err := meili.Index(indexName).Search(parsedQuery.Text, req)
 	if err != nil {
 		log.Error("meilisearch query failed", zap.Error(err), zap.String("index", indexName))
@@ -82,10 +100,12 @@ func Search(c *fiber.Ctx) error {
 	go logSearchAsync(site, user, q, parsedQuery.DocType, int(res.TotalHits), int(tookMs))
 
 	return c.JSON(fiber.Map{
-		"hits":    res.Hits,
-		"parsed":  parsedQuery,
-		"took_ms": tookMs,
-		"total":   res.TotalHits,
+		"hits":        res.Hits,
+		"parsed":      parsedQuery,
+		"took_ms":     tookMs,
+		"total":       res.TotalHits,
+		"ai_enabled":  aiMode == "local",
+		"is_semantic": req.Vector != nil,
 	})
 }
 
