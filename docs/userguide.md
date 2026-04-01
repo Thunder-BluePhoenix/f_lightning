@@ -31,6 +31,91 @@ Neither job touches Frappe's Python layer. There is no polling, no hooks patched
 
 ## 3. Setup
 
+Choose the path that fits your situation:
+
+- **[Quick Setup (Automated)](#3a-quick-setup-automated)** — three commands from the `f_lightning` app directory. Reads credentials directly from your bench. Recommended for most users.
+- **[Manual Setup](#3b-manual-setup)** — step-by-step instructions. Use this if you need to customise any part of the process.
+
+---
+
+### 3a. Quick Setup (Automated)
+
+The `scripts/` directory contains shell scripts that read your bench's `site_config.json` and `common_site_config.json` to auto-fill credentials, configure MariaDB, start Meilisearch, build the Go binaries, and run the initial backfill.
+
+**Run everything in one command:**
+
+```bash
+cd /path/to/frappe-bench/apps/f_lightning
+
+./scripts/install.sh \
+  --bench /path/to/frappe-bench \
+  --site  erp.local
+```
+
+The installer will prompt for the MariaDB root password once and handle the rest. When it finishes you will have:
+- MariaDB configured for ROW-format binlog replication.
+- A dedicated `lightning` database user with replication grants.
+- Meilisearch running as a Docker container (or prompted to start it manually if Docker is not available).
+- A `frappe_lightning/config.yaml` generated from your bench credentials.
+- `lightning-server` and `lightning` binaries built in the app root.
+- Meilisearch indexes populated with your existing data via backfill.
+
+**Installer options:**
+
+| Flag | Description |
+|------|-------------|
+| `--bench PATH` | Path to the frappe-bench directory (required) |
+| `--site NAME` | Frappe site name (required) |
+| `--lightning-pass PASS` | MariaDB Lightning user password (auto-generated if omitted) |
+| `--meili-key KEY` | Meilisearch master key (auto-generated if omitted) |
+| `--api-token TOKEN` | Lightning API Bearer token (auto-generated if omitted) |
+| `--meili-host URL` | Meilisearch URL (default: `http://localhost:7700`) |
+| `--server-id ID` | MariaDB replication server ID (default: `100`) |
+| `--ai-mode MODE` | `off` or `local` (default: `off`) |
+| `--skip-mariadb` | Skip MariaDB setup — already configured |
+| `--skip-meili` | Skip starting Meilisearch |
+| `--skip-build` | Skip building Go binaries |
+| `--skip-backfill` | Skip initial backfill |
+
+**Re-running individual steps:**
+
+```bash
+# Just re-generate config.yaml from bench credentials
+./scripts/generate-config.sh --bench /path/to/bench --site erp.local
+
+# Just re-run the MariaDB user/binlog setup
+./scripts/setup-mariadb.sh
+
+# Just re-run the backfill for all DocTypes
+./scripts/backfill-all.sh --config frappe_lightning/config.yaml --site erp.local
+```
+
+**After the installer completes:**
+
+```bash
+# Start Lightning
+./lightning-server --config frappe_lightning/config.yaml
+
+# Check everything is healthy
+./lightning status --config frappe_lightning/config.yaml
+./lightning diff erp.local "Sales Invoice" --config frappe_lightning/config.yaml
+```
+
+Then install the Frappe app:
+
+```bash
+cd /path/to/frappe-bench
+bench --site erp.local install-app f_lightning
+bench --site erp.local migrate
+bench restart
+```
+
+For running as a background service, see the [deployment guide](deployment.md).
+
+---
+
+### 3b. Manual Setup
+
 ### Step 1 — Enable MariaDB Binary Log
 
 Add to your MariaDB config (`/etc/mysql/mariadb.conf.d/50-server.cnf`):
@@ -110,14 +195,19 @@ api_token: "change-this-before-going-to-production"
 ### Step 4 — Build and Start Lightning
 
 ```bash
+# From the f_lightning app root:
+cd frappe_lightning
+
 # Build the server binary
-go build -o lightning-server ./main.go
+go build -o ../lightning-server ./main.go
 
 # Build the CLI tool
-go build -o lightning ./cmd/lightning/main.go
+go build -o ../lightning ./cmd/lightning/main.go
+
+cd ..
 
 # Start the server
-./lightning-server --config config.yaml
+./lightning-server --config frappe_lightning/config.yaml
 ```
 
 You should see:
@@ -133,15 +223,23 @@ starting global Multi-Tenant API server  addr=:8765
 
 ### Step 5 — Run the Initial Backfill
 
-Lightning's binlog listener only captures changes going forward. To index existing records, run the backfill CLI once per DocType:
+Lightning's binlog listener only captures changes going forward. To index existing records, run the backfill for all DocTypes at once:
 
 ```bash
-./lightning backfill --config config.yaml --site erp.local --doctype "Sales Invoice"
-./lightning backfill --config config.yaml --site erp.local --doctype Customer
-./lightning backfill --config config.yaml --site erp.local --doctype Item
-./lightning backfill --config config.yaml --site erp.local --doctype "Purchase Order"
-./lightning backfill --config config.yaml --site erp.local --doctype Supplier
-./lightning backfill --config config.yaml --site erp.local --doctype Lead
+./scripts/backfill-all.sh \
+  --config frappe_lightning/config.yaml \
+  --site erp.local
+```
+
+Or individually per DocType:
+
+```bash
+./lightning backfill --config frappe_lightning/config.yaml --site erp.local --doctype "Sales Invoice"
+./lightning backfill --config frappe_lightning/config.yaml --site erp.local --doctype Customer
+./lightning backfill --config frappe_lightning/config.yaml --site erp.local --doctype Item
+./lightning backfill --config frappe_lightning/config.yaml --site erp.local --doctype "Purchase Order"
+./lightning backfill --config frappe_lightning/config.yaml --site erp.local --doctype Supplier
+./lightning backfill --config frappe_lightning/config.yaml --site erp.local --doctype Lead
 ```
 
 The backfill streams data in batches of 5,000 rows, with a 100ms pause between batches to keep MariaDB load low. It is safe to run while the main server is running.
