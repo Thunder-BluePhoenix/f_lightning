@@ -201,16 +201,20 @@ Lightning is an **infra-level upgrade disguised as a feature** — something Fra
 
 ## Phase Breakdown
 
-| Phase | Title | Focus |
-|---|---|---|
-| **1** | Infrastructure & Binlog Connection | MariaDB setup, Go project, canal listener |
-| **2** | Indexing & Data Pipeline | Event handling, schema mapping, backfill, hooks |
-| **3** | Search API Proxy & Auth | HTTP server, session auth, RBAC, endpoints |
-| **4** | Frappe Frontend UI & Analytics | Cmd+K UI, analytics dashboard, search logs |
-| **5** | NLP Rule Engine & Advanced Query | Tokenizer → Rules → DSL → Meilisearch translator |
-| **6** | Smart Ranking, Hooks & Multi-Tenancy | Boosting, synonyms, usage signals, per-site isolation |
-| **7** | AI Search Layer (Hybrid) | Local embeddings, semantic search, AI_MODE flag |
-| **8** | Dev Tools, Hardening & Universal API | CLI tools, production ops, public REST API |
+| Phase | Title | Focus | Status |
+|---|---|---|---|
+| **1** | Infrastructure & Binlog Connection | MariaDB setup, Go project, canal listener | ✅ Complete |
+| **2** | Indexing & Data Pipeline | Event handling, schema mapping, backfill, hooks | ✅ Complete |
+| **3** | Search API Proxy & Auth | HTTP server, session auth, RBAC, endpoints | ✅ Complete |
+| **4** | Frappe Frontend UI & Analytics | Cmd+K UI, analytics dashboard, search logs | ✅ Complete |
+| **5** | NLP Rule Engine & Advanced Query | Tokenizer → Rules → DSL → Meilisearch translator | ✅ Complete |
+| **6** | Smart Ranking, Hooks & Multi-Tenancy | Boosting, synonyms, usage signals, per-site isolation | ✅ Complete |
+| **7** | AI Search Layer (Hybrid) | Local embeddings, semantic search, AI_MODE flag | ✅ Complete |
+| **8** | Dev Tools, Hardening & Universal API | CLI tools, production ops, public REST API | ✅ Complete |
+| **9** | Frappe API Gateway | Go reverse proxy — edge auth, caching, rate limiting, circuit breaker | 📋 Planned |
+| **10** | Frappe Background Job Runner | Replace RQ workers with Go goroutines — priority queues, scheduler, retry | 📋 Planned |
+| **11** | Frappe CLI in Go (`frapctl`) | Cross-platform bench replacement — site/app/service management, <5ms startup | 📋 Planned |
+| **12** | Frappe Webhook Engine | Reliable outgoing webhooks — Redis Streams, HMAC signing, retry, DLQ, dashboard | 📋 Planned |
 
 ---
 
@@ -256,11 +260,11 @@ Frappe  →  Go Data Engine  →  Meilisearch + Vector DB
                           →  Universal REST API (external consumers)
 ```
 
-| Stage | What It Is |
-|---|---|
-| v1 — Lightning Search | Sub-10ms search in Frappe |
-| v2 — Lightning Analytics | Real-time query intelligence + business insights |
-| v3 — Lightning Engine | Full data intelligence platform for the Frappe ecosystem |
+| Stage | What It Is | Phases |
+|---|---|---|
+| v1 — Lightning Search | Sub-10ms search in Frappe | 1–8 |
+| v2 — Lightning Infrastructure | API Gateway, Job Runner, CLI, Webhook Engine | 9–12 |
+| v3 — Lightning Platform | Full data intelligence + event streaming + AI layer for the Frappe ecosystem | Future |
 
 ---
 

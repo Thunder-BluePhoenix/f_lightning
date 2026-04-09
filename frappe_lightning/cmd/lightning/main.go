@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,10 +10,12 @@ import (
 
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
+	"frappe_lightning/gateway"
 	"frappe_lightning/nlp"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/meilisearch/meilisearch-go"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -174,12 +177,156 @@ var watchCmd = &cobra.Command{
 	},
 }
 
+// ── Gateway command group ──────────────────────────────────────────────────────
+
+var gatewayCmd = &cobra.Command{
+	Use:   "gateway",
+	Short: "Manage the Lightning API Gateway",
+}
+
+var gatewayStartCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start the API Gateway server",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		if !cfg.Gateway.Enabled {
+			log.Fatal("gateway is not enabled in config (set gateway.enabled: true)")
+		}
+
+		// Build one Redis client per configured gateway site.
+		redisClients := make(map[string]*redis.Client)
+		for _, gs := range cfg.Gateway.Sites {
+			// Match gateway site to its search-site config for Redis credentials.
+			if sc, ok := cfg.GetSite(gs.Name); ok {
+				redisClients[gs.Name] = redis.NewClient(&redis.Options{
+					Addr: sc.Redis.Addr(),
+				})
+			}
+		}
+
+		srv := gateway.NewServer(&cfg.Gateway, redisClients, log)
+		log.Info("starting gateway", zap.Int("port", cfg.Gateway.ListenPort))
+		if err := srv.Start(); err != nil {
+			log.Fatal("gateway stopped", zap.Error(err))
+		}
+	},
+}
+
+var gatewayStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show gateway health and circuit breaker states",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+
+		fmt.Println("⚡ Gateway Status")
+		fmt.Println(strings.Repeat("-", 40))
+		if !cfg.Gateway.Enabled {
+			fmt.Println("  Gateway: DISABLED (set gateway.enabled: true)")
+			return
+		}
+		fmt.Printf("  Listen port: %d\n", cfg.Gateway.ListenPort)
+		fmt.Printf("  Sites configured: %d\n\n", len(cfg.Gateway.Sites))
+		for _, gs := range cfg.Gateway.Sites {
+			fmt.Printf("  Site: %-25s  Workers: %d\n", gs.Name, len(gs.UpstreamWorkers))
+			for _, w := range gs.UpstreamWorkers {
+				fmt.Printf("    → %s\n", w)
+			}
+		}
+	},
+}
+
+var gatewayCacheFlushCmd = &cobra.Command{
+	Use:   "cache-flush [site]",
+	Short: "Flush the response cache for one site or all sites",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		if !cfg.Gateway.Cache.Enabled {
+			fmt.Println("Cache is disabled in config.")
+			return
+		}
+
+		ctx := context.Background()
+
+		// Use the first matching Redis client.
+		var rdb *redis.Client
+		targetSite := ""
+		if len(args) > 0 {
+			targetSite = args[0]
+		}
+
+		for _, gs := range cfg.Gateway.Sites {
+			if targetSite != "" && gs.Name != targetSite {
+				continue
+			}
+			if sc, ok := cfg.GetSite(gs.Name); ok {
+				rdb = redis.NewClient(&redis.Options{Addr: sc.Redis.Addr()})
+				cache := gateway.NewResponseCache(rdb, cfg.Gateway.Cache.Rules)
+				n, err := cache.FlushSite(ctx, gs.Name)
+				if err != nil {
+					fmt.Printf("  %-25s  ERROR: %v\n", gs.Name, err)
+				} else {
+					fmt.Printf("  %-25s  flushed %d keys ✓\n", gs.Name, n)
+				}
+			}
+		}
+	},
+}
+
+var gatewayCacheStatsCmd = &cobra.Command{
+	Use:   "cache-stats",
+	Short: "Show cache hit/miss statistics per site",
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		if !cfg.Gateway.Cache.Enabled {
+			fmt.Println("Cache is disabled in config.")
+			return
+		}
+
+		ctx := context.Background()
+		fmt.Println("⚡ Gateway Cache Stats")
+		fmt.Println(strings.Repeat("-", 50))
+		fmt.Printf("  %-25s  %8s  %8s  %s\n", "Site", "Hits", "Misses", "Hit Rate")
+
+		for _, gs := range cfg.Gateway.Sites {
+			if sc, ok := cfg.GetSite(gs.Name); ok {
+				rdb := redis.NewClient(&redis.Options{Addr: sc.Redis.Addr()})
+				cache := gateway.NewResponseCache(rdb, cfg.Gateway.Cache.Rules)
+				hits, misses := cache.Stats(ctx, gs.Name)
+				var rate float64
+				if total := hits + misses; total > 0 {
+					rate = float64(hits) / float64(total) * 100
+				}
+				fmt.Printf("  %-25s  %8d  %8d  %.1f%%\n", gs.Name, hits, misses, rate)
+			}
+		}
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "config.yaml", "Path to config file")
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(diffCmd)
 	rootCmd.AddCommand(parseCmd)
+
+	// Gateway subcommands
+	gatewayCmd.AddCommand(gatewayStartCmd)
+	gatewayCmd.AddCommand(gatewayStatusCmd)
+	gatewayCmd.AddCommand(gatewayCacheFlushCmd)
+	gatewayCmd.AddCommand(gatewayCacheStatsCmd)
+	rootCmd.AddCommand(gatewayCmd)
 }
 
 func main() {

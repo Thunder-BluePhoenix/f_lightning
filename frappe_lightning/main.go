@@ -7,11 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"frappe_lightning/ai"
 	"frappe_lightning/api"
 	"frappe_lightning/api/middleware"
-	"frappe_lightning/ai"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
+	"frappe_lightning/gateway"
 	"frappe_lightning/search"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -134,6 +135,26 @@ func main() {
 		}
 	}()
 
+	// 6. Spin up API Gateway (optional)
+	var gatewaySrv *gateway.Server
+	if cfg.Gateway.Enabled {
+		gwRedis := make(map[string]*redis.Client)
+		for _, gs := range cfg.Gateway.Sites {
+			if sc, ok := cfg.GetSite(gs.Name); ok {
+				gwRedis[gs.Name] = redis.NewClient(&redis.Options{
+					Addr: sc.Redis.Addr(),
+				})
+			}
+		}
+		gatewaySrv = gateway.NewServer(&cfg.Gateway, gwRedis, log)
+		go func() {
+			if err := gatewaySrv.Start(); err != nil {
+				log.Error("gateway stopped", zap.Error(err))
+			}
+		}()
+		log.Info("⚡ Gateway enabled", zap.Int("port", cfg.Gateway.ListenPort))
+	}
+
 	log.Info("⚡ Lightning is running — multi-tenant mode active")
 
 	// --- Graceful shutdown on SIGINT / SIGTERM ---
@@ -143,7 +164,12 @@ func main() {
 
 	log.Info("⚡ Lightning shutting down gracefully...")
 
-	// 1. Stop API Server
+	if gatewaySrv != nil {
+		if err := gatewaySrv.Stop(); err != nil {
+			log.Error("failed to stop gateway", zap.Error(err))
+		}
+	}
+
 	if err := server.Stop(); err != nil {
 		log.Error("failed to stop API server", zap.Error(err))
 	}

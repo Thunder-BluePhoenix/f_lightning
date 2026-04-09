@@ -9,11 +9,59 @@ import (
 
 // Config is the root configuration loaded from config.yaml.
 type Config struct {
-	Sites               []SiteConfig `yaml:"sites"`
-	AIMode               string       `yaml:"ai_mode"`              // off | local | cloud
-	EmbeddingServerURL   string       `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
-	VectorDimensions     int          `yaml:"vector_dimensions"`    // default 384 for MiniLM
-	APIToken             string       `yaml:"api_token"`            // Global token for universal access
+	Sites              []SiteConfig  `yaml:"sites"`
+	AIMode             string        `yaml:"ai_mode"`              // off | local | cloud
+	EmbeddingServerURL string        `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
+	VectorDimensions   int           `yaml:"vector_dimensions"`    // default 384 for MiniLM
+	APIToken           string        `yaml:"api_token"`            // Global token for universal access
+	Gateway            GatewayConfig `yaml:"gateway"`              // optional reverse proxy config
+}
+
+// GatewayConfig configures the optional API Gateway server.
+type GatewayConfig struct {
+	Enabled        bool             `yaml:"enabled"`
+	ListenPort     int              `yaml:"listen_port"`      // default 7000
+	Sites          []GatewaySite    `yaml:"sites"`
+	Auth           GatewayAuth      `yaml:"auth"`
+	RateLimits     []RateLimitRule  `yaml:"rate_limits"`
+	Cache          GatewayCache     `yaml:"cache"`
+	CircuitBreaker CircuitBreakerCfg `yaml:"circuit_breaker"`
+}
+
+// GatewaySite maps a Frappe site name to its upstream Gunicorn worker URLs.
+type GatewaySite struct {
+	Name            string   `yaml:"name"`
+	UpstreamWorkers []string `yaml:"upstream_workers"` // e.g. ["http://127.0.0.1:8000"]
+}
+
+// GatewayAuth lists URL path prefixes that bypass session validation.
+type GatewayAuth struct {
+	SkipPaths []string `yaml:"skip_paths"`
+}
+
+// RateLimitRule caps requests per user per second on a matching path prefix.
+type RateLimitRule struct {
+	PathPrefix  string `yaml:"path_prefix"`
+	PerUserRPS  int    `yaml:"per_user_rps"`
+}
+
+// GatewayCache configures response caching.
+type GatewayCache struct {
+	Enabled bool        `yaml:"enabled"`
+	Rules   []CacheRule `yaml:"rules"`
+}
+
+// CacheRule caches GET responses for paths matching a prefix, for a given TTL.
+type CacheRule struct {
+	PathPrefix string `yaml:"path_prefix"`
+	TTLSeconds int    `yaml:"ttl_seconds"`
+}
+
+// CircuitBreakerCfg controls the upstream circuit breaker.
+type CircuitBreakerCfg struct {
+	FailureThreshold      int `yaml:"failure_threshold"`        // open after N consecutive failures, default 5
+	OpenDurationSec       int `yaml:"open_duration_sec"`        // seconds before attempting half-open, default 30
+	HalfOpenProbeInterval int `yaml:"half_open_probe_interval"` // seconds between probes, default 10
 }
 
 // SiteConfig holds per-site configuration.
@@ -94,6 +142,19 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.APIToken == "" {
 		cfg.APIToken = "lightning-secret-dev"
+	}
+	// Gateway defaults
+	if cfg.Gateway.ListenPort == 0 {
+		cfg.Gateway.ListenPort = 7000
+	}
+	if cfg.Gateway.CircuitBreaker.FailureThreshold == 0 {
+		cfg.Gateway.CircuitBreaker.FailureThreshold = 5
+	}
+	if cfg.Gateway.CircuitBreaker.OpenDurationSec == 0 {
+		cfg.Gateway.CircuitBreaker.OpenDurationSec = 30
+	}
+	if cfg.Gateway.CircuitBreaker.HalfOpenProbeInterval == 0 {
+		cfg.Gateway.CircuitBreaker.HalfOpenProbeInterval = 10
 	}
 	return &cfg, nil
 }

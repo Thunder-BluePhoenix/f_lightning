@@ -94,6 +94,82 @@
 - [x] Implement Mobile Detail Overlays with responsive toggles
 - [x] Test: P99 latency <10ms verified; CLI diff is 0; all 12 Pillars active
 
-**Project Status: MISSION COMPLETE — 100% PRODUCTION READY**
-⚡ Frappe Lightning is now the ultimate search engine for the Frappe ecosystem: 
-Real-time, AI-Hybrid, Multi-Tenant, and fully observable with a modern Cmd+K interface.
+**Phases 1–8 Status: COMPLETE — Search Engine production-ready**
+⚡ Frappe Lightning is a real-time, AI-Hybrid, Multi-Tenant search engine for the Frappe ecosystem.
+Phases 9–12 extend it into a full Frappe infrastructure platform.
+
+---
+
+## Phase 9: Frappe API Gateway
+
+- [ ] Define `gateway` config block and load into `Config` struct
+- [ ] Implement `gateway/proxy.go` — reverse proxy core with `UpstreamPool` (round-robin)
+- [ ] Implement `gateway/auth.go` — generalised edge auth (reuse Phase 3 middleware)
+- [ ] Implement `gateway/ratelimit.go` — per-user Redis sliding window limiter
+- [ ] Implement `gateway/cache.go` — Redis response cache with TTL rules per path prefix
+- [ ] Implement `gateway/circuit.go` — circuit breaker (closed / open / half-open states)
+- [ ] Implement `gateway/rewrite.go` — path redirect and prefix rewrite rules
+- [ ] Wire all middleware into `gateway/server.go` Fiber app
+- [ ] Add `lightning gateway` CLI subcommands (`start`, `status`, `cache flush`, `cache stats`)
+- [ ] Add Prometheus metrics: `gateway_requests_total`, `gateway_cache_hit_ratio`, `gateway_upstream_latency_seconds`
+- [ ] Write unit tests for rate limiter and circuit breaker state machine
+- [ ] Test: cached GET returns in <1ms; circuit opens after 5 upstream failures
+- [ ] Test: per-user rate limit blocks at threshold; resets after window
+- [ ] Test: auth-skip paths reach upstream without Redis validation
+- [ ] Test: Frappe Desk loads fully through the gateway
+
+## Phase 10: Frappe Background Job Runner
+
+- [ ] Define `job_runner` config block and structs
+- [ ] Implement `jobs/consumer.go` — RQ-compatible `BLPOP` reader
+- [ ] Implement `jobs/pool.go` — goroutine worker pool with per-queue semaphore
+- [ ] Implement `jobs/executor.go` — `bench execute` subprocess runner with timeout
+- [ ] Implement `jobs/retry.go` — exponential backoff re-enqueue (2s → 4s → 8s, max 3)
+- [ ] Implement `jobs/scheduler.go` — cron-based scheduled task enqueuer from Frappe DB
+- [ ] Implement `jobs/metrics.go` — Prometheus counters and histograms
+- [ ] Add `lightning jobs` CLI subcommands (`status`, `list`, `retry`, `retry-all`, `cancel`, `flush`)
+- [ ] Write unit tests for retry backoff logic and queue priority ordering
+- [ ] Integration test: enqueue RQ job from Python → Go runner picks up and executes
+- [ ] Test: 1000 concurrent jobs complete without goroutine leak
+- [ ] Test: failed job retries 3 times then moves to `rq:queue:failed`
+- [ ] Test: scheduled task fires at correct cron interval
+
+## Phase 11: Frappe CLI in Go (`frapctl`)
+
+- [ ] Set up `cmd/frapctl/` directory with cobra root command
+- [ ] Implement bench auto-discovery (`findBenchRoot` — walk up to `sites/common_site_config.json`)
+- [ ] Implement `config/reader.go` — load `site_config.json` and `common_site_config.json`
+- [ ] Implement `config/writer.go` — atomic JSON write with backup
+- [ ] Implement `frapctl site list/create/drop/backup/restore`
+- [ ] Implement `frapctl app list/install/uninstall/update/get`
+- [ ] Implement `frapctl migrate` — delegates to bench with structured output
+- [ ] Implement `frapctl cache clear/stats` — direct Redis operations
+- [ ] Implement `frapctl service status/start/stop/restart` — supervisorctl/systemctl adapter
+- [ ] Implement `frapctl config get/set/show/show-common`
+- [ ] Implement `frapctl shell` and `frapctl console`
+- [ ] Implement `~/.frapctl.yaml` user defaults
+- [ ] Write unit tests for bench auto-discovery and config read/write
+- [ ] Build cross-platform binaries: Linux (amd64, arm64) and macOS
+- [ ] Add shell completion (bash, zsh, fish) via cobra
+- [ ] Test: `frapctl site list` works without `--bench` flag from inside bench dir
+- [ ] Test: `frapctl cache clear --all` completes in <100ms
+- [ ] Test: binary runs on macOS and Linux without Python or Go runtime
+
+## Phase 12: Frappe Webhook Engine
+
+- [ ] Create `Lightning Webhook` and `Lightning Webhook Log` Frappe DocTypes
+- [ ] Implement `f_lightning/webhook.py` — `enqueue()` push to Redis Streams
+- [ ] Wire `doc_events` in `hooks.py` to call `enqueue` for all DocTypes and events
+- [ ] Implement `webhook/consumer.go` — Redis Streams XREADGROUP consumer
+- [ ] Implement `webhook/subscriptions.go` — load and cache subscriptions from Frappe DB
+- [ ] Implement `webhook/delivery.go` — HTTP POST with HMAC-SHA256 signing and timeout
+- [ ] Implement `webhook/retry.go` — backoff scheduler (10s → 30s → 2m → 10m → 1h) and DLQ
+- [ ] Implement `webhook/log.go` — write attempt results to Redis + Frappe DocType
+- [ ] Implement `webhook/metrics.go` — Prometheus counters and histograms
+- [ ] Add `lightning webhooks` CLI subcommands (`status`, `list`, `show`, `replay`, `replay-failed`, `dlq list/replay/flush`, `test`)
+- [ ] Build Frappe Webhook Dashboard page (delivery log, retry rate, DLQ depth)
+- [ ] Write unit tests for HMAC signing and retry backoff schedule
+- [ ] Integration test: save Frappe Customer → webhook delivered to test endpoint within 500ms
+- [ ] Test: endpoint returning 500 retried 5 times then moves to DLQ
+- [ ] Test: `lightning webhooks replay` re-delivers successfully from DLQ
+- [ ] Test: `X-Lightning-Signature` header passes HMAC verification on receiver
