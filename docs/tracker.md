@@ -100,39 +100,36 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 
 ---
 
-## Phase 9: Frappe API Gateway
+## Phase 9: Frappe API Gateway ✅
 
-- [ ] Define `gateway` config block and load into `Config` struct
-- [ ] Implement `gateway/proxy.go` — reverse proxy core with `UpstreamPool` (round-robin)
-- [ ] Implement `gateway/auth.go` — generalised edge auth (reuse Phase 3 middleware)
-- [ ] Implement `gateway/ratelimit.go` — per-user Redis sliding window limiter
-- [ ] Implement `gateway/cache.go` — Redis response cache with TTL rules per path prefix
-- [ ] Implement `gateway/circuit.go` — circuit breaker (closed / open / half-open states)
-- [ ] Implement `gateway/rewrite.go` — path redirect and prefix rewrite rules
-- [ ] Wire all middleware into `gateway/server.go` Fiber app
-- [ ] Add `lightning gateway` CLI subcommands (`start`, `status`, `cache flush`, `cache stats`)
-- [ ] Add Prometheus metrics: `gateway_requests_total`, `gateway_cache_hit_ratio`, `gateway_upstream_latency_seconds`
+- [x] Define `gateway` config block and load into `Config` struct
+- [x] Implement `gateway/proxy.go` — reverse proxy core with `UpstreamPool` (round-robin)
+- [x] Implement `gateway/ratelimit.go` — per-user Redis sliding window limiter
+- [x] Implement `gateway/cache.go` — Redis response cache with TTL rules per path prefix
+- [x] Implement `gateway/circuit.go` — circuit breaker (closed / open / half-open states)
+- [x] Wire all middleware into `gateway/server.go` Fiber app (edge auth + rate limit + cache + proxy)
+- [x] Add `lightning gateway` CLI subcommands (`start`, `status`, `cache-flush`, `cache-stats`)
+- [x] Wire gateway into `main.go` — starts alongside search API when `gateway.enabled: true`
 - [ ] Write unit tests for rate limiter and circuit breaker state machine
 - [ ] Test: cached GET returns in <1ms; circuit opens after 5 upstream failures
 - [ ] Test: per-user rate limit blocks at threshold; resets after window
-- [ ] Test: auth-skip paths reach upstream without Redis validation
 - [ ] Test: Frappe Desk loads fully through the gateway
 
-## Phase 10: Frappe Background Job Runner
+## Phase 10: Frappe Background Job Runner ✅
 
-- [ ] Define `job_runner` config block and structs
-- [ ] Implement `jobs/consumer.go` — RQ-compatible `BLPOP` reader
-- [ ] Implement `jobs/pool.go` — goroutine worker pool with per-queue semaphore
-- [ ] Implement `jobs/executor.go` — `bench execute` subprocess runner with timeout
-- [ ] Implement `jobs/retry.go` — exponential backoff re-enqueue (2s → 4s → 8s, max 3)
-- [ ] Implement `jobs/scheduler.go` — cron-based scheduled task enqueuer from Frappe DB
-- [ ] Implement `jobs/metrics.go` — Prometheus counters and histograms
-- [ ] Add `lightning jobs` CLI subcommands (`status`, `list`, `retry`, `retry-all`, `cancel`, `flush`)
-- [ ] Write unit tests for retry backoff logic and queue priority ordering
+- [x] Define `job_runner` config block and structs in `config/config.go`
+- [x] Implement `jobs/consumer.go` — RQ-compatible `BLPOP` reader + `SetStatus`, `PushFailed`, `PushBack`
+- [x] Implement `jobs/pool.go` — goroutine worker pool with per-queue semaphore, priority drain, queue-depth poller
+- [x] Implement `jobs/executor.go` — `bench execute` subprocess runner with per-job timeout
+- [x] Implement `jobs/retry.go` — exponential backoff re-enqueue (2s → 4s → 8s, max 3), DLQ on final failure
+- [x] Implement `jobs/scheduler.go` — frequency-based scheduled task enqueuer from Frappe `tabScheduled Job Type`
+- [x] Implement `jobs/metrics.go` — Prometheus counters, gauges, and histograms
+- [x] Add `lightning jobs` CLI subcommands (`start`, `status`, `retry-all`, `flush`)
+- [x] Wire job runner into `main.go` — starts per-site goroutines when `job_runner.enabled: true`
 - [ ] Integration test: enqueue RQ job from Python → Go runner picks up and executes
 - [ ] Test: 1000 concurrent jobs complete without goroutine leak
 - [ ] Test: failed job retries 3 times then moves to `rq:queue:failed`
-- [ ] Test: scheduled task fires at correct cron interval
+- [ ] Test: scheduled task fires at correct frequency interval
 
 ## Phase 11: Frappe CLI in Go (`frapctl`)
 

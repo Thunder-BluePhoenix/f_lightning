@@ -11,6 +11,7 @@ import (
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
 	"frappe_lightning/gateway"
+	"frappe_lightning/jobs"
 	"frappe_lightning/nlp"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -314,6 +315,124 @@ var gatewayCacheStatsCmd = &cobra.Command{
 	},
 }
 
+// ── Jobs command group ────────────────────────────────────────────────────────
+
+var jobsCmd = &cobra.Command{
+	Use:   "jobs",
+	Short: "Manage the Lightning background job runner",
+}
+
+var jobsStartCmd = &cobra.Command{
+	Use:   "start [site]",
+	Short: "Start the background job runner for a site",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		if !cfg.JobRunner.Enabled {
+			log.Fatal("job_runner is not enabled in config (set job_runner.enabled: true)")
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		runner := jobs.NewRunner(siteName, rdb, cfg.JobRunner, log)
+		log.Info("starting job runner", zap.String("site", siteName))
+		runner.Start(context.Background())
+	},
+}
+
+var jobsStatusCmd = &cobra.Command{
+	Use:   "status [site]",
+	Short: "Show queue depths and job counts",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		consumer := jobs.NewConsumer(rdb, siteName, log)
+		ctx := context.Background()
+
+		fmt.Printf("⚡ Job Queue Status — %s\n", siteName)
+		fmt.Println(strings.Repeat("-", 45))
+		fmt.Printf("  %-12s  %8s\n", "Queue", "Pending")
+		fmt.Println(strings.Repeat("-", 45))
+
+		queues := []string{"high", "default", "low", "long", "failed"}
+		for _, q := range queues {
+			depth := consumer.QueueDepth(ctx, q)
+			fmt.Printf("  %-12s  %8d\n", q, depth)
+		}
+	},
+}
+
+var jobsRetryAllCmd = &cobra.Command{
+	Use:   "retry-all [site]",
+	Short: "Re-enqueue all jobs in the failed queue",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		ctx := context.Background()
+		consumer := jobs.NewConsumer(rdb, siteName, log)
+
+		var moved int64
+		for {
+			result, err := rdb.RPopLPush(ctx, "rq:queue:failed", "rq:queue:default").Result()
+			if err != nil || result == "" {
+				break
+			}
+			// Reset status so the runner picks it up cleanly.
+			consumer.SetStatus(ctx, result, "queued")
+			moved++
+		}
+		fmt.Printf("  re-enqueued %d failed jobs → default queue ✓\n", moved)
+	},
+}
+
+var jobsFlushCmd = &cobra.Command{
+	Use:   "flush [site] [queue]",
+	Short: "Clear all pending jobs from a queue",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName, queue := args[0], args[1]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		ctx := context.Background()
+		n, err := rdb.Del(ctx, "rq:queue:"+queue).Result()
+		if err != nil {
+			log.Fatal("flush failed", zap.Error(err))
+		}
+		fmt.Printf("  flushed queue %q — removed %d entries ✓\n", queue, n)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "config.yaml", "Path to config file")
 	rootCmd.AddCommand(statusCmd)
@@ -327,6 +446,13 @@ func init() {
 	gatewayCmd.AddCommand(gatewayCacheFlushCmd)
 	gatewayCmd.AddCommand(gatewayCacheStatsCmd)
 	rootCmd.AddCommand(gatewayCmd)
+
+	// Jobs subcommands
+	jobsCmd.AddCommand(jobsStartCmd)
+	jobsCmd.AddCommand(jobsStatusCmd)
+	jobsCmd.AddCommand(jobsRetryAllCmd)
+	jobsCmd.AddCommand(jobsFlushCmd)
+	rootCmd.AddCommand(jobsCmd)
 }
 
 func main() {

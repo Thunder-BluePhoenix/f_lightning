@@ -9,12 +9,27 @@ import (
 
 // Config is the root configuration loaded from config.yaml.
 type Config struct {
-	Sites              []SiteConfig  `yaml:"sites"`
-	AIMode             string        `yaml:"ai_mode"`              // off | local | cloud
-	EmbeddingServerURL string        `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
-	VectorDimensions   int           `yaml:"vector_dimensions"`    // default 384 for MiniLM
-	APIToken           string        `yaml:"api_token"`            // Global token for universal access
-	Gateway            GatewayConfig `yaml:"gateway"`              // optional reverse proxy config
+	Sites              []SiteConfig   `yaml:"sites"`
+	AIMode             string         `yaml:"ai_mode"`              // off | local | cloud
+	EmbeddingServerURL string         `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
+	VectorDimensions   int            `yaml:"vector_dimensions"`    // default 384 for MiniLM
+	APIToken           string         `yaml:"api_token"`            // Global token for universal access
+	Gateway            GatewayConfig  `yaml:"gateway"`              // optional reverse proxy config
+	JobRunner          JobRunnerConfig `yaml:"job_runner"`           // optional background job runner
+}
+
+// JobRunnerConfig configures the Go-based background job runner.
+type JobRunnerConfig struct {
+	Enabled   bool              `yaml:"enabled"`
+	BenchPath string            `yaml:"bench_path"` // path to the bench root, e.g. /home/user/frappe-bench
+	Queues    []QueueConfig     `yaml:"queues"`
+	MaxRetries int              `yaml:"max_retries"` // default 3
+}
+
+// QueueConfig holds per-queue concurrency settings.
+type QueueConfig struct {
+	Name        string `yaml:"name"`        // e.g. "high", "default", "low"
+	Concurrency int    `yaml:"concurrency"` // max goroutines processing this queue
 }
 
 // GatewayConfig configures the optional API Gateway server.
@@ -142,6 +157,18 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.APIToken == "" {
 		cfg.APIToken = "lightning-secret-dev"
+	}
+	// JobRunner defaults
+	if cfg.JobRunner.MaxRetries == 0 {
+		cfg.JobRunner.MaxRetries = 3
+	}
+	if len(cfg.JobRunner.Queues) == 0 {
+		cfg.JobRunner.Queues = []QueueConfig{
+			{Name: "high", Concurrency: 10},
+			{Name: "default", Concurrency: 20},
+			{Name: "low", Concurrency: 5},
+			{Name: "long", Concurrency: 3},
+		}
 	}
 	// Gateway defaults
 	if cfg.Gateway.ListenPort == 0 {

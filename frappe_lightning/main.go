@@ -7,12 +7,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"context"
+
 	"frappe_lightning/ai"
 	"frappe_lightning/api"
 	"frappe_lightning/api/middleware"
 	"frappe_lightning/canal"
 	"frappe_lightning/config"
 	"frappe_lightning/gateway"
+	"frappe_lightning/jobs"
 	"frappe_lightning/search"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -155,6 +158,20 @@ func main() {
 		log.Info("⚡ Gateway enabled", zap.Int("port", cfg.Gateway.ListenPort))
 	}
 
+	// 7. Spin up Background Job Runner (optional)
+	var jobCtxCancel context.CancelFunc
+	if cfg.JobRunner.Enabled {
+		jobCtx, cancel := context.WithCancel(context.Background())
+		jobCtxCancel = cancel
+		for i := range cfg.Sites {
+			site := &cfg.Sites[i]
+			rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+			runner := jobs.NewRunner(site.Name, rdb, cfg.JobRunner, log)
+			go runner.Start(jobCtx)
+		}
+		log.Info("⚡ Job runner enabled", zap.Int("sites", len(cfg.Sites)))
+	}
+
 	log.Info("⚡ Lightning is running — multi-tenant mode active")
 
 	// --- Graceful shutdown on SIGINT / SIGTERM ---
@@ -163,6 +180,10 @@ func main() {
 	<-quit
 
 	log.Info("⚡ Lightning shutting down gracefully...")
+
+	if jobCtxCancel != nil {
+		jobCtxCancel()
+	}
 
 	if gatewaySrv != nil {
 		if err := gatewaySrv.Stop(); err != nil {
