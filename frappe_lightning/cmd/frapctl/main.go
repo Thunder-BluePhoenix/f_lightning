@@ -13,6 +13,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // ── Global flags ──────────────────────────────────────────────────────────────
@@ -22,16 +23,49 @@ var (
 	flagSite  string
 )
 
-// resolveBench returns --bench if provided, otherwise auto-discovers from cwd.
+// userDefaults holds values loaded from ~/.frapctl.yaml.
+type userDefaults struct {
+	Bench       string `yaml:"bench"`
+	DefaultSite string `yaml:"default_site"`
+	Color       bool   `yaml:"color"`
+}
+
+var defaults userDefaults
+
+// loadUserDefaults reads ~/.frapctl.yaml if it exists. Silently ignored if absent.
+func loadUserDefaults() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".frapctl.yaml"))
+	if err != nil {
+		return // file not present — that's fine
+	}
+	yaml.Unmarshal(data, &defaults) //nolint:errcheck
+}
+
+// resolveBench returns --bench flag, then ~/.frapctl.yaml bench, then auto-discovery.
 func resolveBench() (string, error) {
 	if flagBench != "" {
 		return flagBench, nil
+	}
+	if defaults.Bench != "" {
+		return defaults.Bench, nil
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	return bench.FindRoot(cwd)
+}
+
+// resolveSite returns --site flag then ~/.frapctl.yaml default_site.
+func resolveSite() string {
+	if flagSite != "" {
+		return flagSite
+	}
+	return defaults.DefaultSite
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────
@@ -41,6 +75,40 @@ var rootCmd = &cobra.Command{
 	Short: "⚡ frapctl — fast Frappe management CLI",
 	Long: `frapctl is a compiled Go CLI for managing Frappe bench, sites, apps,
 cache, and services without Python startup overhead.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		loadUserDefaults()
+	},
+}
+
+// ── completion ────────────────────────────────────────────────────────────────
+
+var completionCmd = &cobra.Command{
+	Use:   "completion [bash|zsh|fish]",
+	Short: "Generate shell completion script",
+	Long: `Generate a shell completion script and source it in your shell profile.
+
+  # bash
+  source <(frapctl completion bash)
+
+  # zsh
+  source <(frapctl completion zsh)
+
+  # fish
+  frapctl completion fish | source`,
+	ValidArgs: []string{"bash", "zsh", "fish"},
+	Args:      cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		switch args[0] {
+		case "bash":
+			return rootCmd.GenBashCompletion(os.Stdout)
+		case "zsh":
+			return rootCmd.GenZshCompletion(os.Stdout)
+		case "fish":
+			return rootCmd.GenFishCompletion(os.Stdout, true)
+		default:
+			return fmt.Errorf("unsupported shell %q — use bash, zsh, or fish", args[0])
+		}
+	},
 }
 
 // ── site ──────────────────────────────────────────────────────────────────────
@@ -594,7 +662,7 @@ func init() {
 	configCmd.AddCommand(configGetCmd, configSetCmd, configShowCmd, configShowCommonCmd)
 
 	// root
-	rootCmd.AddCommand(siteCmd, appCmd, migrateCmd, cacheCmd, serviceCmd, configCmd, shellCmd, consoleCmd)
+	rootCmd.AddCommand(siteCmd, appCmd, migrateCmd, cacheCmd, serviceCmd, configCmd, shellCmd, consoleCmd, completionCmd)
 }
 
 func main() {

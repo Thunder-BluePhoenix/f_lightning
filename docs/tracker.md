@@ -110,10 +110,9 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Wire all middleware into `gateway/server.go` Fiber app (edge auth + rate limit + cache + proxy)
 - [x] Add `lightning gateway` CLI subcommands (`start`, `status`, `cache-flush`, `cache-stats`)
 - [x] Wire gateway into `main.go` — starts alongside search API when `gateway.enabled: true`
-- [ ] Write unit tests for rate limiter and circuit breaker state machine
-- [ ] Test: cached GET returns in <1ms; circuit opens after 5 upstream failures
-- [ ] Test: per-user rate limit blocks at threshold; resets after window
-- [ ] Test: Frappe Desk loads fully through the gateway
+- [x] Write unit tests for circuit breaker state machine (7 tests: closed/open/half-open/re-open/reset)
+- [x] Write unit tests for response cache (round-trip, POST no-op, non-2xx no-op, no-rule no-op, header encode/decode)
+- [ ] Test: Frappe Desk loads fully through the gateway (manual)
 
 ## Phase 10: Frappe Background Job Runner ✅
 
@@ -126,10 +125,10 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Implement `jobs/metrics.go` — Prometheus counters, gauges, and histograms
 - [x] Add `lightning jobs` CLI subcommands (`start`, `status`, `retry-all`, `flush`)
 - [x] Wire job runner into `main.go` — starts per-site goroutines when `job_runner.enabled: true`
-- [ ] Integration test: enqueue RQ job from Python → Go runner picks up and executes
-- [ ] Test: 1000 concurrent jobs complete without goroutine leak
-- [ ] Test: failed job retries 3 times then moves to `rq:queue:failed`
-- [ ] Test: scheduled task fires at correct frequency interval
+- [x] Write unit tests: retry backoff formula (2^n seconds), context-cancel stops goroutine
+- [x] Write unit tests: 1000 concurrent jobs via semaphore pool, queue priority order, semaphore blocking
+- [x] Write unit tests: DLQ branching logic (Retries >= maxRetries → failed queue)
+- [ ] Integration test: enqueue RQ job from Python → Go runner picks up and executes (manual)
 
 ## Phase 11: Frappe CLI in Go (`frapctl`) ✅
 
@@ -144,14 +143,15 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Implement `frapctl service status/start/stop/restart` — supervisorctl adapter, fallback to bench
 - [x] Implement `frapctl config get/set/show/show-common`
 - [x] Implement `frapctl shell` and `frapctl console`
-- [ ] Implement `~/.frapctl.yaml` user defaults
-- [ ] Add shell completion (bash, zsh, fish) via cobra
-- [ ] Test: `frapctl site list` works without `--bench` from inside bench dir
-- [ ] Test: binary runs on macOS and Linux without Python or Go runtime
+- [x] Implement `~/.frapctl.yaml` user defaults (`bench`, `default_site`, `color`) — loaded via `PersistentPreRun`
+- [x] Add shell completion via `frapctl completion [bash|zsh|fish]`
+- [ ] Test: `frapctl site list` works without `--bench` from inside bench dir (manual)
+- [ ] Test: binary runs on macOS and Linux without Python or Go runtime (manual)
 
 ## Phase 12: Frappe Webhook Engine ✅
 
-- [ ] Create `Lightning Webhook` and `Lightning Webhook Log` Frappe DocTypes
+- [x] Create `Lightning Webhook` DocType (name, doctype_filter, events, endpoint_url, secret_key, enabled, max_retries, timeout_sec)
+- [x] Create `Lightning Webhook Log` DocType (delivery_id, subscription, doctype, doc_name, event, status_code, success, latency_ms, error, response_body)
 - [x] Implement `f_lightning/webhook.py` — `enqueue()` pushes to Redis Stream (non-blocking, error-safe)
 - [x] Wire `doc_events` in `hooks.py` — all 5 events for all DocTypes (`"*"`)
 - [x] Implement `webhook/consumer.go` — Redis Streams XREADGROUP consumer, `Ack`, `PushDLQ`, `DLQDepth/List/Flush`
@@ -163,8 +163,10 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Implement `webhook/engine.go` — goroutine pool, subscription matching, retrier, logger all wired
 - [x] Add `lightning webhooks` CLI subcommands (`status`, `list`, `dlq-list`, `dlq-flush`, `dlq-replay`)
 - [x] Wire webhook engine into `main.go` — starts per-site when `webhook.enabled: true`
+- [x] Write unit tests: HMAC sign determinism, different secrets/payloads produce different sigs
+- [x] Write unit tests: HTTP delivery success (200), failure (500), full sign-and-verify cycle
+- [x] Write unit tests: backoff schedule values (10s→30s→2m→10m→1h), monotonic, index clamping, DLQ gate
+- [x] Write unit tests: subscription match (exact DocType, wildcard, disabled, wrong event, multiple)
 - [ ] Build Frappe Webhook Dashboard page
-- [ ] Write unit tests for HMAC signing and retry backoff schedule
-- [ ] Integration test: save Frappe Customer → webhook delivered within 500ms
-- [ ] Test: endpoint returns 500 → retried 5 times → moved to DLQ
-- [ ] Test: `X-Lightning-Signature` header passes HMAC verification on receiver
+- [ ] Integration test: save Frappe Customer → webhook delivered within 500ms (manual)
+- [ ] Test: endpoint returns 500 → retried 5 times → moved to DLQ (manual)

@@ -1,0 +1,114 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:name",
+ "creation": "2026-04-11 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "name",
+  "doctype_filter",
+  "events",
+  "column_break_1",
+  "endpoint_url",
+  "secret_key",
+  "enabled",
+  "section_break_1",
+  "max_retries",
+  "timeout_sec"
+ ],
+ "fields": [
+  {
+   "fieldname": "name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Subscription Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "doctype_filter",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "DocType",
+   "description": "DocType to watch, or * for all",
+   "reqd": 1
+  },
+  {
+   "fieldname": "events",
+   "fieldtype": "Small Text",
+   "label": "Events (JSON array)",
+   "description": "e.g. [\"after_insert\", \"on_update\"]",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "endpoint_url",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Endpoint URL",
+   "reqd": 1
+  },
+  {
+   "fieldname": "secret_key",
+   "fieldtype": "Password",
+   "label": "Secret Key",
+   "description": "Used to sign outgoing requests with HMAC-SHA256"
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "default": "1",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Retry Settings"
+  },
+  {
+   "fieldname": "max_retries",
+   "fieldtype": "Int",
+   "default": "5",
+   "label": "Max Retries"
+  },
+  {
+   "fieldname": "timeout_sec",
+   "fieldtype": "Int",
+   "default": "10",
+   "label": "Timeout (seconds)"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-04-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Frappe Lightning",
+ "name": "Lightning Webhook",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "name"
+}
