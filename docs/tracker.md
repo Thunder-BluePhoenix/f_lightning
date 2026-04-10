@@ -112,7 +112,10 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Wire gateway into `main.go` — starts alongside search API when `gateway.enabled: true`
 - [x] Write unit tests for circuit breaker state machine (7 tests: closed/open/half-open/re-open/reset)
 - [x] Write unit tests for response cache (round-trip, POST no-op, non-2xx no-op, no-rule no-op, header encode/decode)
-- [ ] Test: Frappe Desk loads fully through the gateway (manual)
+- [ ] T9-1: Frappe Desk loads through :7000 — see `docs/manual_test_guide.md#t9-1`
+- [ ] T9-2: Cached GET faster on 2nd request — see `docs/manual_test_guide.md#t9-2`
+- [ ] T9-3: Circuit opens after 5 failures, closes on recovery — see `docs/manual_test_guide.md#t9-3`
+- [ ] T9-4: Rate limit returns 429 beyond threshold — see `docs/manual_test_guide.md#t9-4`
 
 ## Phase 10: Frappe Background Job Runner ✅
 
@@ -128,7 +131,9 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Write unit tests: retry backoff formula (2^n seconds), context-cancel stops goroutine
 - [x] Write unit tests: 1000 concurrent jobs via semaphore pool, queue priority order, semaphore blocking
 - [x] Write unit tests: DLQ branching logic (Retries >= maxRetries → failed queue)
-- [ ] Integration test: enqueue RQ job from Python → Go runner picks up and executes (manual)
+- [ ] T10-1: RQ job enqueued from Python → Go runner executes — see `docs/manual_test_guide.md#t10-1`
+- [ ] T10-2: Failed job retries 3× → rq:queue:failed — see `docs/manual_test_guide.md#t10-2`
+- [ ] T10-3: Scheduled task fires at correct interval — see `docs/manual_test_guide.md#t10-3`
 
 ## Phase 11: Frappe CLI in Go (`frapctl`) ✅
 
@@ -145,8 +150,10 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Implement `frapctl shell` and `frapctl console`
 - [x] Implement `~/.frapctl.yaml` user defaults (`bench`, `default_site`, `color`) — loaded via `PersistentPreRun`
 - [x] Add shell completion via `frapctl completion [bash|zsh|fish]`
-- [ ] Test: `frapctl site list` works without `--bench` from inside bench dir (manual)
-- [ ] Test: binary runs on macOS and Linux without Python or Go runtime (manual)
+- [ ] T11-1: `frapctl site list` without `--bench` — see `docs/manual_test_guide.md#t11-1`
+- [ ] T11-2: `frapctl cache clear` <500ms — see `docs/manual_test_guide.md#t11-2`
+- [ ] T11-3: `frapctl config set` atomic write — see `docs/manual_test_guide.md#t11-3`
+- [ ] T11-4/5/6/7: shell, completion, defaults, no-Python — see `docs/manual_test_guide.md`
 
 ## Phase 12: Frappe Webhook Engine ✅
 
@@ -167,6 +174,11 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [x] Write unit tests: HTTP delivery success (200), failure (500), full sign-and-verify cycle
 - [x] Write unit tests: backoff schedule values (10s→30s→2m→10m→1h), monotonic, index clamping, DLQ gate
 - [x] Write unit tests: subscription match (exact DocType, wildcard, disabled, wrong event, multiple)
-- [ ] Build Frappe Webhook Dashboard page
-- [ ] Integration test: save Frappe Customer → webhook delivered within 500ms (manual)
-- [ ] Test: endpoint returns 500 → retried 5 times → moved to DLQ (manual)
+- [x] Build Frappe Webhook Dashboard page (`lightning_webhooks.js/json` + Python API)
+  - KPI strip, hourly trend, retry breakdown, subscription stats, recent 50 deliveries, inline Replay button
+  - `get_webhook_dashboard_data()` + `replay_webhook_delivery()` whitelisted API methods
+- [ ] T12-1: Webhook delivered within 500ms of save — see `docs/manual_test_guide.md#t12-1`
+- [ ] T12-2: `X-Lightning-Signature` passes HMAC verification — see `docs/manual_test_guide.md#t12-2`
+- [ ] T12-3: 5 failures → DLQ — see `docs/manual_test_guide.md#t12-3`
+- [ ] T12-4: DLQ replay delivers successfully — see `docs/manual_test_guide.md#t12-4`
+- [ ] T12-5: Dashboard page renders with live data — see `docs/manual_test_guide.md#t12-5`
