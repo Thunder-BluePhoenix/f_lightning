@@ -13,6 +13,7 @@ import (
 	"frappe_lightning/gateway"
 	"frappe_lightning/jobs"
 	"frappe_lightning/nlp"
+	"frappe_lightning/webhook"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/meilisearch/meilisearch-go"
@@ -433,6 +434,156 @@ var jobsFlushCmd = &cobra.Command{
 	},
 }
 
+// ── Webhooks command group ────────────────────────────────────────────────────
+
+var webhooksCmd = &cobra.Command{
+	Use:   "webhooks",
+	Short: "Manage the Lightning webhook engine",
+}
+
+var webhooksStatusCmd = &cobra.Command{
+	Use:   "status [site]",
+	Short: "Show webhook engine status and DLQ depth",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		ctx := context.Background()
+		cons, _ := webhook.NewConsumer(rdb, siteName, "cli", log)
+
+		fmt.Printf("⚡ Webhook Engine Status — %s\n", siteName)
+		fmt.Println(strings.Repeat("-", 45))
+		fmt.Printf("  Enabled       : %v\n", cfg.Webhook.Enabled)
+		fmt.Printf("  DLQ depth     : %d\n", cons.DLQDepth(ctx))
+	},
+}
+
+var webhooksListCmd = &cobra.Command{
+	Use:   "list [site]",
+	Short: "Show recent webhook delivery log",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		logger := webhook.NewLogger(rdb, siteName)
+		entries := logger.Recent(context.Background(), 50)
+
+		fmt.Printf("⚡ Recent Deliveries — %s\n", siteName)
+		fmt.Println(strings.Repeat("-", 80))
+		fmt.Printf("  %-38s  %-15s  %-12s  %s\n", "Delivery ID", "DocType", "Event", "Status")
+		fmt.Println(strings.Repeat("-", 80))
+		for _, e := range entries {
+			status := "✓ ok"
+			if !e.Success {
+				status = "✗ fail"
+			}
+			fmt.Printf("  %-38s  %-15s  %-12s  %s (%dms)\n",
+				e.DeliveryID, e.DocType, e.Event, status, e.LatencyMs)
+		}
+	},
+}
+
+var webhooksDLQListCmd = &cobra.Command{
+	Use:   "dlq-list [site]",
+	Short: "List items in the dead-letter queue",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		cons, _ := webhook.NewConsumer(rdb, siteName, "cli", log)
+		tasks := cons.DLQList(context.Background(), 50)
+
+		fmt.Printf("⚡ Dead-Letter Queue — %s (%d items)\n", siteName, len(tasks))
+		fmt.Println(strings.Repeat("-", 70))
+		for _, t := range tasks {
+			fmt.Printf("  %s  %-15s  %-12s  → %s  (attempt %d)\n",
+				t.DeliveryID, t.Event.DocType, t.Event.Event, t.Sub.EndpointURL, t.AttemptNum)
+		}
+	},
+}
+
+var webhooksDLQFlushCmd = &cobra.Command{
+	Use:   "dlq-flush [site]",
+	Short: "Clear the dead-letter queue for a site",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		cons, _ := webhook.NewConsumer(rdb, siteName, "cli", log)
+		n := cons.DLQFlush(context.Background())
+		fmt.Printf("  DLQ flushed — removed %d items ✓\n", n)
+	},
+}
+
+var webhooksDLQReplayCmd = &cobra.Command{
+	Use:   "dlq-replay [site]",
+	Short: "Re-deliver all items in the dead-letter queue",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		siteName := args[0]
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			log.Fatal("failed to load config", zap.Error(err))
+		}
+		site, ok := cfg.GetSite(siteName)
+		if !ok {
+			log.Fatal("site not found", zap.String("site", siteName))
+		}
+		rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+		cons, _ := webhook.NewConsumer(rdb, siteName, "cli", log)
+		ctx := context.Background()
+		tasks := cons.DLQList(ctx, 1000)
+		del := webhook.NewDeliverer()
+		logger := webhook.NewLogger(rdb, siteName)
+
+		var ok2, fail int
+		for _, task := range tasks {
+			task.AttemptNum = 0
+			result := del.Send(ctx, task)
+			logger.Record(ctx, task, result)
+			if result.Success {
+				ok2++
+			} else {
+				fail++
+			}
+		}
+		cons.DLQFlush(ctx)
+		fmt.Printf("  replayed %d items — %d succeeded, %d failed ✓\n", len(tasks), ok2, fail)
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "config.yaml", "Path to config file")
 	rootCmd.AddCommand(statusCmd)
@@ -453,6 +604,14 @@ func init() {
 	jobsCmd.AddCommand(jobsRetryAllCmd)
 	jobsCmd.AddCommand(jobsFlushCmd)
 	rootCmd.AddCommand(jobsCmd)
+
+	// Webhooks subcommands
+	webhooksCmd.AddCommand(webhooksStatusCmd)
+	webhooksCmd.AddCommand(webhooksListCmd)
+	webhooksCmd.AddCommand(webhooksDLQListCmd)
+	webhooksCmd.AddCommand(webhooksDLQFlushCmd)
+	webhooksCmd.AddCommand(webhooksDLQReplayCmd)
+	rootCmd.AddCommand(webhooksCmd)
 }
 
 func main() {

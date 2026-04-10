@@ -132,13 +132,15 @@ app_include_js = "/assets/f_lightning/js/lightning_search.js"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"*": {
+		"after_insert": "f_lightning.webhook.enqueue",
+		"on_update":    "f_lightning.webhook.enqueue",
+		"on_submit":    "f_lightning.webhook.enqueue",
+		"on_cancel":    "f_lightning.webhook.enqueue",
+		"on_trash":     "f_lightning.webhook.enqueue",
+	}
+}
 
 # Scheduled Tasks
 # ---------------

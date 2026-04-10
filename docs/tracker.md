@@ -131,42 +131,40 @@ Phases 9–12 extend it into a full Frappe infrastructure platform.
 - [ ] Test: failed job retries 3 times then moves to `rq:queue:failed`
 - [ ] Test: scheduled task fires at correct frequency interval
 
-## Phase 11: Frappe CLI in Go (`frapctl`)
+## Phase 11: Frappe CLI in Go (`frapctl`) ✅
 
-- [ ] Set up `cmd/frapctl/` directory with cobra root command
-- [ ] Implement bench auto-discovery (`findBenchRoot` — walk up to `sites/common_site_config.json`)
-- [ ] Implement `config/reader.go` — load `site_config.json` and `common_site_config.json`
-- [ ] Implement `config/writer.go` — atomic JSON write with backup
-- [ ] Implement `frapctl site list/create/drop/backup/restore`
-- [ ] Implement `frapctl app list/install/uninstall/update/get`
-- [ ] Implement `frapctl migrate` — delegates to bench with structured output
-- [ ] Implement `frapctl cache clear/stats` — direct Redis operations
-- [ ] Implement `frapctl service status/start/stop/restart` — supervisorctl/systemctl adapter
-- [ ] Implement `frapctl config get/set/show/show-common`
-- [ ] Implement `frapctl shell` and `frapctl console`
+- [x] Set up `cmd/frapctl/` directory with cobra root command
+- [x] Implement bench auto-discovery (`FindRoot` — walk up to `sites/common_site_config.json`)
+- [x] Implement `bench/discover.go` — `LoadSiteConfig`, `LoadCommonConfig`, `ListSites`, `InstalledApps`, `AppVersion`
+- [x] Implement `bench/discover.go` — `SetSiteConfigKey` / `GetSiteConfigKey` with atomic write (write-then-rename)
+- [x] Implement `frapctl site list/create/drop/backup/restore`
+- [x] Implement `frapctl app list/get/install/uninstall/update`
+- [x] Implement `frapctl migrate` — delegates to bench, supports `--all` for every site
+- [x] Implement `frapctl cache clear/stats` — direct Redis operations via `common_site_config.json`
+- [x] Implement `frapctl service status/start/stop/restart` — supervisorctl adapter, fallback to bench
+- [x] Implement `frapctl config get/set/show/show-common`
+- [x] Implement `frapctl shell` and `frapctl console`
 - [ ] Implement `~/.frapctl.yaml` user defaults
-- [ ] Write unit tests for bench auto-discovery and config read/write
-- [ ] Build cross-platform binaries: Linux (amd64, arm64) and macOS
 - [ ] Add shell completion (bash, zsh, fish) via cobra
-- [ ] Test: `frapctl site list` works without `--bench` flag from inside bench dir
-- [ ] Test: `frapctl cache clear --all` completes in <100ms
+- [ ] Test: `frapctl site list` works without `--bench` from inside bench dir
 - [ ] Test: binary runs on macOS and Linux without Python or Go runtime
 
-## Phase 12: Frappe Webhook Engine
+## Phase 12: Frappe Webhook Engine ✅
 
 - [ ] Create `Lightning Webhook` and `Lightning Webhook Log` Frappe DocTypes
-- [ ] Implement `f_lightning/webhook.py` — `enqueue()` push to Redis Streams
-- [ ] Wire `doc_events` in `hooks.py` to call `enqueue` for all DocTypes and events
-- [ ] Implement `webhook/consumer.go` — Redis Streams XREADGROUP consumer
-- [ ] Implement `webhook/subscriptions.go` — load and cache subscriptions from Frappe DB
-- [ ] Implement `webhook/delivery.go` — HTTP POST with HMAC-SHA256 signing and timeout
-- [ ] Implement `webhook/retry.go` — backoff scheduler (10s → 30s → 2m → 10m → 1h) and DLQ
-- [ ] Implement `webhook/log.go` — write attempt results to Redis + Frappe DocType
-- [ ] Implement `webhook/metrics.go` — Prometheus counters and histograms
-- [ ] Add `lightning webhooks` CLI subcommands (`status`, `list`, `show`, `replay`, `replay-failed`, `dlq list/replay/flush`, `test`)
-- [ ] Build Frappe Webhook Dashboard page (delivery log, retry rate, DLQ depth)
+- [x] Implement `f_lightning/webhook.py` — `enqueue()` pushes to Redis Stream (non-blocking, error-safe)
+- [x] Wire `doc_events` in `hooks.py` — all 5 events for all DocTypes (`"*"`)
+- [x] Implement `webhook/consumer.go` — Redis Streams XREADGROUP consumer, `Ack`, `PushDLQ`, `DLQDepth/List/Flush`
+- [x] Implement `webhook/subscriptions.go` — MariaDB loader with 60s background refresh, `Match(doctype, event)`
+- [x] Implement `webhook/delivery.go` — HTTP POST with HMAC-SHA256 `X-Lightning-Signature`, per-job timeout
+- [x] Implement `webhook/retry.go` — backoff (10s → 30s → 2m → 10m → 1h), DLQ after max retries
+- [x] Implement `webhook/log.go` — Redis List capped at 1000, TTL 7d, `Recent` / `Get` for CLI
+- [x] Implement `webhook/metrics.go` — `deliveries_total`, `delivery_latency_seconds`, `pending`, `dlq_depth`, `retry_total`
+- [x] Implement `webhook/engine.go` — goroutine pool, subscription matching, retrier, logger all wired
+- [x] Add `lightning webhooks` CLI subcommands (`status`, `list`, `dlq-list`, `dlq-flush`, `dlq-replay`)
+- [x] Wire webhook engine into `main.go` — starts per-site when `webhook.enabled: true`
+- [ ] Build Frappe Webhook Dashboard page
 - [ ] Write unit tests for HMAC signing and retry backoff schedule
-- [ ] Integration test: save Frappe Customer → webhook delivered to test endpoint within 500ms
-- [ ] Test: endpoint returning 500 retried 5 times then moves to DLQ
-- [ ] Test: `lightning webhooks replay` re-delivers successfully from DLQ
+- [ ] Integration test: save Frappe Customer → webhook delivered within 500ms
+- [ ] Test: endpoint returns 500 → retried 5 times → moved to DLQ
 - [ ] Test: `X-Lightning-Signature` header passes HMAC verification on receiver

@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"context"
+	"strings"
 
 	"frappe_lightning/ai"
 	"frappe_lightning/api"
@@ -17,6 +18,7 @@ import (
 	"frappe_lightning/gateway"
 	"frappe_lightning/jobs"
 	"frappe_lightning/search"
+	"frappe_lightning/webhook"
 
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/redis/go-redis/v9"
@@ -172,6 +174,32 @@ func main() {
 		log.Info("⚡ Job runner enabled", zap.Int("sites", len(cfg.Sites)))
 	}
 
+	// 8. Spin up Webhook Engine (optional)
+	var whCtxCancel context.CancelFunc
+	if cfg.Webhook.Enabled {
+		whCtx, cancel := context.WithCancel(context.Background())
+		whCtxCancel = cancel
+		for i := range cfg.Sites {
+			site := &cfg.Sites[i]
+			rdb := redis.NewClient(&redis.Options{Addr: site.Redis.Addr()})
+			// Derive the database name from the site name (Frappe convention: dots → underscores).
+			dbName := strings.ReplaceAll(site.Name, ".", "_")
+			dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
+				site.MariaDB.User, site.MariaDB.Password,
+				site.MariaDB.Host, site.MariaDB.Port,
+				dbName,
+			)
+			eng, err := webhook.NewEngine(site.Name, rdb, dsn, cfg.Webhook, log)
+			if err != nil {
+				log.Error("webhook engine init failed",
+					zap.String("site", site.Name), zap.Error(err))
+				continue
+			}
+			go eng.Start(whCtx)
+		}
+		log.Info("⚡ Webhook engine enabled", zap.Int("sites", len(cfg.Sites)))
+	}
+
 	log.Info("⚡ Lightning is running — multi-tenant mode active")
 
 	// --- Graceful shutdown on SIGINT / SIGTERM ---
@@ -183,6 +211,9 @@ func main() {
 
 	if jobCtxCancel != nil {
 		jobCtxCancel()
+	}
+	if whCtxCancel != nil {
+		whCtxCancel()
 	}
 
 	if gatewaySrv != nil {

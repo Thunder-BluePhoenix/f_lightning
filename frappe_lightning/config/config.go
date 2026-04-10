@@ -9,13 +9,20 @@ import (
 
 // Config is the root configuration loaded from config.yaml.
 type Config struct {
-	Sites              []SiteConfig   `yaml:"sites"`
-	AIMode             string         `yaml:"ai_mode"`              // off | local | cloud
-	EmbeddingServerURL string         `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
-	VectorDimensions   int            `yaml:"vector_dimensions"`    // default 384 for MiniLM
-	APIToken           string         `yaml:"api_token"`            // Global token for universal access
-	Gateway            GatewayConfig  `yaml:"gateway"`              // optional reverse proxy config
-	JobRunner          JobRunnerConfig `yaml:"job_runner"`           // optional background job runner
+	Sites              []SiteConfig    `yaml:"sites"`
+	AIMode             string          `yaml:"ai_mode"`              // off | local | cloud
+	EmbeddingServerURL string          `yaml:"embedding_server_url"` // e.g. http://localhost:5000/embed
+	VectorDimensions   int             `yaml:"vector_dimensions"`    // default 384 for MiniLM
+	APIToken           string          `yaml:"api_token"`            // Global token for universal access
+	Gateway            GatewayConfig   `yaml:"gateway"`              // optional reverse proxy config
+	JobRunner          JobRunnerConfig  `yaml:"job_runner"`           // optional background job runner
+	Webhook            WebhookConfig   `yaml:"webhook"`              // optional webhook engine config
+}
+
+// WebhookConfig enables and configures the outgoing webhook engine.
+type WebhookConfig struct {
+	Enabled    bool `yaml:"enabled"`
+	WorkerPool int  `yaml:"worker_pool"` // default 20
 }
 
 // JobRunnerConfig configures the Go-based background job runner.
@@ -157,6 +164,10 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.APIToken == "" {
 		cfg.APIToken = "lightning-secret-dev"
+	}
+	// Webhook defaults
+	if cfg.Webhook.WorkerPool == 0 {
+		cfg.Webhook.WorkerPool = 20
 	}
 	// JobRunner defaults
 	if cfg.JobRunner.MaxRetries == 0 {
