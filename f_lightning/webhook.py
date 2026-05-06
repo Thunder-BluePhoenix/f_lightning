@@ -39,5 +39,9 @@ def enqueue(doc, method):
 			maxlen=100_000,
 		)
 	except Exception:
-		# Never let a webhook error break a document save.
-		frappe.log_error(frappe.get_traceback(), "Lightning Webhook Enqueue Error")
+		# Never call frappe.log_error here — it inserts an Error Log document,
+		# frappe.log_error(frappe.get_traceback(), "Lightning Webhook Enqueue Error")
+		# which fires after_insert again, causing infinite recursion when Redis is down.
+		frappe.logger("f_lightning").warning(
+			f"Lightning webhook enqueue failed for {doc.doctype} {doc.name}: {frappe.get_traceback()}"
+		)
